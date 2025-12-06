@@ -29,7 +29,7 @@ def upload_document_to_collection(
             f"{DEFAULT_API_URL_FOR_UI}/database/process/",
             params={"collection_name": collection_name},
             files=files,
-            timeout=TIMEOUT_UPLOAD_REQUEST,
+            timeout=None,
         )
         response.raise_for_status()
 
@@ -77,7 +77,7 @@ def upload_documents_batch_to_collection(
             f"{DEFAULT_API_URL_FOR_UI}/database/process_batch/",
             params={"collection_name": collection_name},
             files=files,
-            timeout=TIMEOUT_UPLOAD_REQUEST,
+            timeout=None,
         )
         response.raise_for_status()
 

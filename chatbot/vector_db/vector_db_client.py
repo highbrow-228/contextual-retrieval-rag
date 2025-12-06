@@ -228,22 +228,21 @@ class ChromaDBClient(BaseVectorDB):
 
     # Document Operations
     def _add_to_collection(
-        self, collection_name: CollectionName, data: list[Chunk]
+        self, collection_name: CollectionName, data: list[Chunk], batch_size: int = 100
     ) -> None:
         """Add data to a collection with batch size limit.
         
-        ChromaDB has a maximum batch size of 1000, so we split larger batches.
+        ChromaDB has a maximum batch size of 100, so we split larger batches.
         """
-        MAX_BATCH_SIZE = 1000
 
         collection: Collection = self._get_or_create_collection(
             collection_name
         )
 
-        # Split data into batches of max 1000
+        # Split data into batches of max 100
         total_chunks = len(data)
-        for i in range(0, total_chunks, MAX_BATCH_SIZE):
-            batch = data[i : i + MAX_BATCH_SIZE]
+        for i in range(0, total_chunks, batch_size):
+            batch = data[i : i + batch_size]
             prepared_data: PrepareDataSchema = self.prepare_data(batch)
 
             collection.add(
@@ -254,7 +253,7 @@ class ChromaDBClient(BaseVectorDB):
             )
 
             logger.opt(colors=True).info(
-                f"Added batch <cyan>{i // MAX_BATCH_SIZE + 1}</cyan> ({len(batch)} chunks) to collection <green>{collection_name.value}</green>"
+                f"Added batch <cyan>{i // batch_size + 1}</cyan> ({len(batch)} chunks) to collection <green>{collection_name.value}</green>"
             )
 
         logger.opt(colors=True).info(
