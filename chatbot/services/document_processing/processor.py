@@ -46,10 +46,7 @@ class Processor(BaseProcessor):
     # the per-format handlers: `_process_pdf`, `_process_txt`, `_process_md`, `_process_docx`.
     SUPPORTED_FORMATS: ClassVar[List[str]] = ["pdf", "txt", "md", "docx"]
 
-    def __init__(
-        self,
-        engine: str,
-    ) -> None:
+    def __init__(self, engine: str) -> None:
         self.engine = engine
 
         self.__init_pdf_pipeline_options()
@@ -223,13 +220,13 @@ class Processor(BaseProcessor):
 
             doc: DoclingDocument = result.document
 
-            text_markdown: str = doc.export_to_markdown()
+            text: str = doc.export_to_text()
 
             logger.opt(colors=True).info(
                 f"Completed MD processing in {time.time() - start_time:.2f} seconds for temp file: <green>{tmp_path.name}</green>"
             )
 
-            return text_markdown
+            return text
 
         except Exception as e:
 
@@ -299,13 +296,13 @@ class Processor(BaseProcessor):
 
         doc: DoclingDocument = result.document
 
-        text_markdown: str = doc.export_to_markdown()
+        text: str = doc.export_to_text()
 
         logger.opt(colors=True).info(
             f"Completed {input_format.value} processing in {time.time() - start_time:.2f} seconds for temp file: <green>{tmp_path.name}</green>"
         )
 
-        return text_markdown
+        return text
 
     def __init_pdf_pipeline_options(self) -> None:
         """Initialize PDF processor with Docling settings."""
