@@ -257,10 +257,13 @@ else:
             ):
                 if st.session_state.get("confirm_delete_all"):
                     with st.spinner("Deleting all documents..."):
-                        delete_all_documents(selected_collection)
-                        st.success(
-                            f"All documents deleted from '{selected_collection}'"
-                        )
+                        result: bool = delete_all_documents(selected_collection)
+                        if result:
+                            st.success(
+                                f"Deleted {result['successful']} document(s) from '{selected_collection}'"
+                            )
+                        else:
+                            st.info("No documents to delete or something went wrong.")
                         st.session_state.confirm_delete_all = False
                         st.rerun()
                 else:

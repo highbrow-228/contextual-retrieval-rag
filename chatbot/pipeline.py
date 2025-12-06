@@ -115,57 +115,39 @@ class DocumentProcessingPipeline(BaseProcessor):
         self, upload_files: List[UploadFile], collection_name: CollectionName
     ) -> List[List[Chunk]]:
         """Process multiple uploaded documents and add chunks to the vector database."""
-        try:
-            # Process documents to extract text
-            documents: list[tuple[str, str]] = (
-                await self.document_processor.process_batch(upload_files)
-            )
+        batch_chunks: List[List[Chunk]] = []
+        successful_docs = 0
+        failed_docs = 0
+        failed_doc_errors: dict[str, str] = {}
 
-            # Process chunking in batch
-            batch_chunks: List[List[Chunk]] = await self.chunker.process_batch(
-                documents
-            )
-
-            # Embed all chunks from the batch
-            total_chunks = 0
-            for doc_idx, chunks_list in enumerate(batch_chunks):
-                try:
-                    filename = (
-                        upload_files[doc_idx].filename
-                        if doc_idx < len(upload_files)
-                        else f"Document {doc_idx}"
-                    )
-                    for chunk_idx, chunk in enumerate(chunks_list):
-                        try:
-                            embeddings: list[float] = self.embedder.process(
-                                chunk.content
-                            )
-                            chunk.embeddings = embeddings
-                        except Exception as e:
-                            logger.opt(colors=True).error(
-                                f"Error embedding chunk <yellow>{chunk_idx}</yellow> from <green>{filename}</green>: <red>{str(e)}</red>"
-                            )
-                            raise
-                    total_chunks += len(chunks_list)
-                except Exception as e:
-                    logger.opt(colors=True).error(
-                        f"Error processing document <yellow>{doc_idx}</yellow> in batch: <red>{str(e)}</red>"
-                    )
-                    raise
-
-            # Store all chunks in vector database
-            for chunks_list in batch_chunks:
-                self.db_handler.process(
-                    collection_name=collection_name, data=chunks_list
+        for upload_file in upload_files:
+            try:
+                chunks = await self.process_document(upload_file, collection_name)
+                batch_chunks.append(chunks)
+                successful_docs += 1
+            except Exception as e:
+                failed_docs += 1
+                failed_doc_errors[upload_file.filename] = str(e)
+                logger.opt(colors=True).warning(
+                    f"Document <yellow>{upload_file.filename}</yellow> failed to process: <red>{str(e)}</red>"
                 )
 
-            return batch_chunks
+        # Log batch processing statistics
+        logger.opt(colors=True).info(
+            f"Batch processing completed for collection '<green>{collection_name.value}</green>': "
+            f"<green>{successful_docs}</green> successful, <red>{failed_docs}</red> failed"
+        )
 
-        except Exception as e:
-            logger.opt(colors=True).error(
-                f"Error processing batch of <yellow>{len(upload_files)}</yellow> documents for collection '<green>{collection_name.value}</green>': <red>{str(e)}</red>"
+        if failed_docs > 0:
+            logger.opt(colors=True).warning(
+                f"Failed documents: {', '.join(failed_doc_errors.keys())}"
             )
-            raise
+            for filename, error in failed_doc_errors.items():
+                logger.opt(colors=True).debug(
+                    f"  - <yellow>{filename}</yellow>: <red>{error}</red>"
+                )
+
+        return batch_chunks
 
     @traceable(
         run_type="tool",

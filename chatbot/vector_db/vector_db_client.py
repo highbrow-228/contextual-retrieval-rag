@@ -308,6 +308,91 @@ class ChromaDBClient(BaseVectorDB):
                 f"Failed to delete document '{doc_id}' from collection '{collection_name.value}': {str(e)}"
             )
 
+    def _delete_batch_from_collection(
+        self, collection_name: CollectionName, doc_ids: list[str]
+    ) -> DeleteByFilenameSchema:
+        """Delete a batch of documents from the collection by their IDs.
+
+        Args:
+            collection_name: Name of the collection
+            doc_ids: List of document IDs to delete
+
+        Returns:
+            Dictionary with deletion statistics:
+            - total: Total documents to delete
+            - successful: Number of successfully deleted documents
+            - failed: Number of documents that failed to delete
+            - errors: List of errors if any occurred
+
+        Raises:
+            DocumentDeletionError: If batch deletion operation fails
+        """
+        MAX_BATCH_SIZE = 900
+
+        if not doc_ids:
+            logger.opt(colors=True).warning(
+                f"No document IDs provided for deletion from collection <green>{collection_name.value}</green>."
+            )
+            return DeleteByFilenameSchema(
+                collection_name=collection_name,
+                filename="batch_delete",
+                total=0,
+                successful=0,
+                failed=0,
+                errors=[],
+            )
+
+        try:
+            collection: Collection = self._get_or_create_collection(
+                collection_name
+            )
+
+            total_docs = len(doc_ids)
+            successful_deletes = 0
+            failed_deletes = 0
+            errors = []
+
+            # Split into batches of max 900
+            for batch_idx, i in enumerate(range(0, total_docs, MAX_BATCH_SIZE)):
+                batch = doc_ids[i : i + MAX_BATCH_SIZE]
+
+                try:
+                    collection.delete(ids=batch)
+                    successful_deletes += len(batch)
+
+                    logger.opt(colors=True).info(
+                        f"Deleted batch <cyan>{batch_idx + 1}</cyan> ({len(batch)} document(s)) from collection <green>{collection_name.value}</green>"
+                    )
+                except Exception as e:
+                    failed_deletes += len(batch)
+                    error_msg = f"Failed to delete batch {batch_idx + 1}: {str(e)}"
+                    errors.append(error_msg)
+                    logger.opt(colors=True).error(
+                        f"Error deleting batch <cyan>{batch_idx + 1}</cyan> from <green>{collection_name.value}</green>: <red>{str(e)}</red>"
+                    )
+
+            logger.opt(colors=True).info(
+                f"Batch deletion completed from collection <green>{collection_name.value}</green>: "
+                f"<green>{successful_deletes}</green> successful, <red>{failed_deletes}</red> failed"
+            )
+
+            return DeleteByFilenameSchema(
+                collection_name=collection_name,
+                filename="batch_delete",
+                total=total_docs,
+                successful=successful_deletes,
+                failed=failed_deletes,
+                errors=errors,
+            )
+
+        except Exception as e:
+            logger.opt(colors=True).error(
+                f"Error deleting batch of documents from <green>{collection_name.value}</green>: <red>{str(e)}</red>"
+            )
+            raise DocumentDeletionError(
+                f"Failed to delete batch of documents from collection '{collection_name.value}': {str(e)}"
+            )
+
     def _delete_by_filename(
         self, collection_name: CollectionName, filename: str
     ) -> DeleteByFilenameSchema:

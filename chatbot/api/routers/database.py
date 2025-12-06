@@ -453,12 +453,12 @@ async def delete_documents_by_filename(
 
 
 @router.delete(
-    "/all_documents", response_model=list[DeleteFromCollectionSchema]
+    "/all_documents", response_model=DeleteByFilenameSchema
 )
 @log_endpoint_execution
 async def delete_collection_route(
     collection_name: CollectionName,
-) -> list[DeleteFromCollectionSchema]:
+) -> DeleteByFilenameSchema:
     """
     Delete all documents from a collection.
 
@@ -468,7 +468,7 @@ async def delete_collection_route(
 
     Returns
     -------
-    - **list[DeleteFromCollectionSchema]**: List where each item represents deletion status per document.
+    - **DeleteByFilenameSchema**: List where each item represents deletion status per document.
 
     Raises
     ------
@@ -488,32 +488,10 @@ async def delete_collection_route(
             return []
 
         # Delete each document and collect results
-        deletion_results: list[DeleteFromCollectionSchema] = []
-        for chunk in chunks:
-            try:
-                pipeline.db_handler._delete_from_collection(
-                    collection_name=collection_name, doc_id=chunk.id
-                )
-                deletion_results.append(
-                    DeleteFromCollectionSchema(
-                        collection_name=collection_name,
-                        doc_id=chunk.id,
-                        status=Status.SUCCESS,
-                        error=None,
-                    )
-                )
-            except Exception as e:
-                logger.opt(colors=True).error(
-                    f"Error deleting document <yellow>{chunk.id}</yellow>: {e}"
-                )
-                deletion_results.append(
-                    DeleteFromCollectionSchema(
-                        collection_name=collection_name,
-                        doc_id=chunk.id,
-                        status=Status.FAILED,
-                        error=str(e),
-                    )
-                )
+        deletion_results: DeleteByFilenameSchema = pipeline.db_handler._delete_batch_from_collection(
+            collection_name=collection_name,
+            doc_ids=[chunk.id for chunk in chunks],
+        )
 
         logger.opt(colors=True).info(
             f"Collection clear operation completed. Total: <cyan>{len(deletion_results)}</cyan>, Successful: <cyan>{sum(1 for r in deletion_results if r.status == Status.SUCCESS)}</cyan>"

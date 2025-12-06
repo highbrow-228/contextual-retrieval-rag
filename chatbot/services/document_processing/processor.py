@@ -141,7 +141,7 @@ class Processor(BaseProcessor):
         self, upload_files: List[UploadFile]
     ) -> List[Tuple[Optional[str], str]]:
         tasks = [
-            self._process_with_filename(upload_file)
+            self.process(upload_file)
             for upload_file in upload_files
         ]
 
@@ -175,7 +175,7 @@ class Processor(BaseProcessor):
         text: str = doc.export_to_text()
 
         logger.opt(colors=True).info(
-            f"Completed PDF processing in {time.time() - start_time:.2f} seconds for temp file: <green>{tmp_path.name}</green>"
+            f"Completed PDF processing in <yellow>{time.time() - start_time:.2f}</yellow> seconds for temp file: <green>{tmp_path.name}</green>"
         )
 
         return text

@@ -50,7 +50,7 @@ def delete_document_by_filename(
         st.error(f"Failed to delete documents: {e}")
 
 
-def delete_all_documents(selected_collection: str) -> None:
+def delete_all_documents(selected_collection: str) -> bool:
     try:
         response = requests.delete(
             f"{DEFAULT_API_URL_FOR_UI}/database/all_documents",
@@ -58,5 +58,6 @@ def delete_all_documents(selected_collection: str) -> None:
             timeout=TIMEOUT_PER_REQUEST,
         )
         response.raise_for_status()
+        return True
     except Exception as e:
         st.error(f"Failed to delete documents: {e}")
