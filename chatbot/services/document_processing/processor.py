@@ -3,6 +3,7 @@
 # Standard library imports
 import asyncio
 import logging
+import os
 import tempfile
 import time
 from pathlib import Path
@@ -17,7 +18,10 @@ from docling.datamodel.base_models import InputFormat
 from docling.datamodel.document import ConversionResult
 from docling.datamodel.pipeline_options import (
     EasyOcrOptions,
+    LayoutOptions,
     PdfPipelineOptions,
+    TableFormerMode,
+    TableStructureOptions,
 )
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types import DoclingDocument
@@ -45,14 +49,10 @@ class Processor(BaseProcessor):
     def __init__(
         self,
         engine: str,
-        code_enrichment: bool,
-        formula_enrichment: bool,
-        num_threads: int,
     ) -> None:
         self.engine = engine
-        self.code_enrichment = code_enrichment
-        self.formula_enrichment = formula_enrichment
-        self.num_threads = num_threads
+
+        self.__init_pdf_pipeline_options()
 
     @traceable(
         run_type="tool",
@@ -162,28 +162,12 @@ class Processor(BaseProcessor):
         """Convert a PDF to a DoclingDocument using configured Docling pipeline."""
         start_time = time.time()
 
-        pipeline = PdfPipelineOptions(
-            do_ocr=True,
-            do_code_enrichment=self.code_enrichment,
-            do_formula_enrichment=self.formula_enrichment,
-            accelerator_options=AcceleratorOptions(
-                num_threads=self.num_threads,
-                device=AcceleratorDevice.CUDA,
-            ),
-            ocr_options=EasyOcrOptions(
-                lang=["en", "uk", "ru"],
-                model_storage_directory="ocr_models",  # Path to store downloaded OCR models
-                confidence_threshold=0.75,  # Lower value → detect more uncertain text
-                bitmap_area_threshold=0.1,  # Lower value → capture smaller text regions
-                download_enabled=True,  # Automatically download missing models
-                suppress_mps_warnings=True,  # Hide irrelevant MPS (Metal) warnings
-            ),
-        )
-
         converter: DocumentConverter = DocumentConverter(
             allowed_formats=[InputFormat.PDF],
             format_options={
-                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline)
+                InputFormat.PDF: PdfFormatOption(
+                    pipeline_options=self.pdf_pipeline_options,
+                )
             },
         )
 
@@ -191,13 +175,13 @@ class Processor(BaseProcessor):
 
         doc: DoclingDocument = result.document
 
-        text_markdown: str = doc.export_to_markdown()
+        text: str = doc.export_to_text()
 
         logger.opt(colors=True).info(
             f"Completed PDF processing in {time.time() - start_time:.2f} seconds for temp file: <green>{tmp_path.name}</green>"
         )
 
-        return text_markdown
+        return text
 
     @traceable(
         run_type="tool",
@@ -236,8 +220,8 @@ class Processor(BaseProcessor):
             converter = DocumentConverter()
 
             result: ConversionResult = converter.convert(tmp_path)
-            
-            doc: DoclingDocument = result.document  
+
+            doc: DoclingDocument = result.document
 
             text_markdown: str = doc.export_to_markdown()
 
@@ -267,7 +251,9 @@ class Processor(BaseProcessor):
             # Single fallback try/except to python-docx parsing
             try:
                 doc = DocxDocument(tmp_path)
-                paragraphs: List[str] = [p.text for p in doc.paragraphs if p.text.strip()]
+                paragraphs: List[str] = [
+                    p.text for p in doc.paragraphs if p.text.strip()
+                ]
                 return "\n\n".join(paragraphs)
             except Exception as e:
                 raise ValueError(f"Failed to process DOCX: {str(e)}")
@@ -308,11 +294,11 @@ class Processor(BaseProcessor):
         converter: DocumentConverter = DocumentConverter(
             allowed_formats=[input_format],
         )
-        
+
         result: ConversionResult = converter.convert(tmp_path)
-        
+
         doc: DoclingDocument = result.document
-        
+
         text_markdown: str = doc.export_to_markdown()
 
         logger.opt(colors=True).info(
@@ -320,3 +306,42 @@ class Processor(BaseProcessor):
         )
 
         return text_markdown
+
+    def __init_pdf_pipeline_options(self) -> None:
+        """Initialize PDF processor with Docling settings."""
+        self.pdf_pipeline_options = PdfPipelineOptions(
+            accelerator_options=AcceleratorOptions(
+                num_threads=os.cpu_count(),  # Use all available CPU cores for parallel processing
+                device=AcceleratorDevice.CUDA,
+            ),
+            # Pictures
+            do_picture_classification=True,  # Classify and categorize images
+            do_picture_description=True,  # Generate descriptions for images
+            images_scale=5.0,  # Upscale images 5x for better OCR quality
+            # Tables
+            do_table_structure=True,  # Extract table structure and layout
+            do_table_enrichment=True,  # Enhance table data extraction
+            do_code_enrichment=True,  # Extract code from documents
+            do_cell_matching=True,  # Match table cells accurately
+            do_formula_enrichment=True,  # Extract mathematical formulas
+            table_structure_options=TableStructureOptions(
+                do_cell_matching=True,  # Align table cells precisely
+                mode=TableFormerMode.ACCURATE,  # Use high-accuracy table parsing mode
+            ),
+            # OCR
+            do_ocr=True,  # Enable optical character recognition
+            ocr_options=EasyOcrOptions(
+                lang=["en", "uk", "ru"],
+                model_storage_directory="ocr_models",  # Path to store downloaded OCR models
+                confidence_threshold=0.3,  # Lower value → detect more uncertain text
+                bitmap_area_threshold=0.001,  # Lower value → capture smaller text regions
+                download_enabled=True,  # Auto-download missing OCR models
+                suppress_mps_warnings=True,  # Hide irrelevant MPS (Metal) warnings
+            ),
+            # Layout
+            enable_page_segmentation=True,  # Divide pages into logical sections
+            preserve_visual_order=True,  # Keep original reading order
+            layout_options=LayoutOptions(
+                create_orphan_clusters=True,  # Group isolated text elements
+            ),
+        )

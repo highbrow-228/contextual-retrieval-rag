@@ -69,7 +69,8 @@ python-docx = "^1.2.0"
 docx = "^0.2.4"
 pywin32 = "^311"
 datasets = "^4.4.1"
-huggingface-hub = ">=0.23,<1"
+huggingface-hub = "<1.0"
+hf-xet = "^1.2.0"
 
 [[tool.poetry.source]]
 name = "pytorch-cu129"

@@ -181,12 +181,6 @@ class ChromaDBClient(BaseVectorDB):
                         order_number_of_chunk=metadatas_list[i].get(
                             "order_number_of_chunk", "Not specified"
                         ),
-                        markdown_header=metadatas_list[i].get(
-                            "markdown_header", "Not specified"
-                        ),
-                        markdown_section=metadatas_list[i].get(
-                            "markdown_section", "Not specified"
-                        ),
                         date_added=metadatas_list[i].get("date_added"),
                     ),
                 ),

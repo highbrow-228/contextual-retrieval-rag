@@ -222,9 +222,6 @@ class DocumentProcessingPipeline(BaseProcessor):
     def _initialize_document_processor(self) -> None:
         self.document_processor: Processor = Processor(
             engine=ocr_settings.ENGINE,
-            code_enrichment=ocr_settings.CODE_ENRICHMENT,
-            formula_enrichment=ocr_settings.FORMULA_ENRICHMENT,
-            num_threads=ocr_settings.OMP_NUM_THREADS,
         )
 
     @log_initialization("Chunker")

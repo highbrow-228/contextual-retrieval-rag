@@ -18,16 +18,6 @@ class Metadata(BaseModel):
         description="Order number of the chunk in the original document",
     )
 
-    markdown_header: Optional[str] = Field(
-        default="",
-        description="Metadata extracted from markdown headers",
-    )
-
-    markdown_section: Optional[str] = Field(
-        default="",
-        description="Metadata extracted from markdown sections",
-    )
-
     date_added: datetime = Field(
         default_factory=datetime.now,
         description="Date when the chunk was added",
