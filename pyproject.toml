@@ -29,13 +29,17 @@ extend-exclude = '''/(
 '''
 
 [project]
-name = "chatbot"
+name = "thesis"
 version = "3.11.0"
 description = ""
-authors = [
-    {name = "Your Name",email = "you@example.com"}
-]
+authors = [{name = "Sviatoslav", email = "sviatoslav.kru@gmail.com"}]
 readme = "README.md"
+
+[tool.poetry]
+name = "thesis"
+version = "3.11.0"
+description = ""
+packages = [{include = "chatbot"}, {include = "ui"}]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.12"

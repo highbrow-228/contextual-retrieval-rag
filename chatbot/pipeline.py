@@ -62,6 +62,17 @@ class DocumentProcessingPipeline(BaseProcessor):
                 n_results=n_results,
             )
 
+            if rag_results.retrieved_chunks == []:
+                logger.opt(colors=True).warning(
+                    f"No relevant chunks found in the database for input '<yellow>{user_input[:100]}</yellow>'."
+                )
+                return Chat(
+                    llm_response=(
+                        "I'm sorry, but I couldn't find any relevant information in the documents to answer your question.\n"
+                        "No relevant chunks were found in the database."
+                    )
+                )
+
             text_chunks: str = self.chunker.format_retrieved_chunks(
                 rag_results.retrieved_chunks
             )
