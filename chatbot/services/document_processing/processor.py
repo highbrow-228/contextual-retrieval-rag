@@ -1,0 +1,322 @@
+"""PDF processing module for converting PDF documents to structured text."""
+
+# Standard library imports
+import asyncio
+import logging
+import tempfile
+import time
+from pathlib import Path
+from typing import ClassVar, List, Optional, Tuple
+
+# Third-party imports
+from docling.datamodel.accelerator_options import (
+    AcceleratorDevice,
+    AcceleratorOptions,
+)
+from docling.datamodel.base_models import InputFormat
+from docling.datamodel.document import ConversionResult
+from docling.datamodel.pipeline_options import (
+    EasyOcrOptions,
+    PdfPipelineOptions,
+)
+from docling.document_converter import DocumentConverter, PdfFormatOption
+from docling_core.types import DoclingDocument
+from docx import Document as DocxDocument
+from fastapi import UploadFile
+from langsmith import traceable
+from loguru import logger
+
+# Local imports
+from chatbot.base.base_classes import BaseProcessor
+
+
+# Disable verbose logging from docling libraries
+logging.getLogger("docling").setLevel(logging.WARNING)
+logging.getLogger("docling_core").setLevel(logging.WARNING)
+
+
+class Processor(BaseProcessor):
+    """Handles PDF file operations."""
+
+    # Supported formats that this processor implements. Keep in sync with
+    # the per-format handlers: `_process_pdf`, `_process_txt`, `_process_md`, `_process_docx`.
+    SUPPORTED_FORMATS: ClassVar[List[str]] = ["pdf", "txt", "md", "docx"]
+
+    def __init__(
+        self,
+        engine: str,
+        code_enrichment: bool,
+        formula_enrichment: bool,
+        num_threads: int,
+    ) -> None:
+        self.engine = engine
+        self.code_enrichment = code_enrichment
+        self.formula_enrichment = formula_enrichment
+        self.num_threads = num_threads
+
+    @traceable(
+        run_type="tool",
+        name="Process Upload",
+        metadata={
+            "type": "sequential",
+            "ls_provider": "DoclingProcessor",
+        },
+    )
+    async def process(self, upload_file: UploadFile) -> Optional[str]:
+        """
+        Export an uploaded document to plain text (string).
+
+        Supported formats:
+        - **pdf**: Uses docling PDF pipeline to extract structured text (markdown).
+        - **txt**, **md**: Read file content as plain text.
+        - **docx**: Attempt to use `python-docx` to extract text; if not available, instructs to install it.
+
+        Parameters
+        ----------
+        - **upload_file** (UploadFile): The uploaded file to process.
+
+        Returns
+        -------
+        - **str | None**: The processed textual content (e.g., markdown) or None where not applicable.
+
+        Raises
+        ------
+        - **ValueError**: If the file format is unsupported or necessary libraries are missing.
+        """
+        suffix = Path(upload_file.filename).suffix.lower().replace(".", "")
+
+        logger.opt(colors=True).info(
+            f"Processing uploaded file: <green>{upload_file.filename}</green>"
+        )
+        logger.opt(colors=True).debug(
+            f"Detected file format: <green>{suffix}</green> for file: <green>{upload_file.filename}</green>"
+        )
+
+        # Create a temporary directory for temporary files
+        TEMP_DIR = Path("temp_pdfs")
+        TEMP_DIR.mkdir(exist_ok=True)
+        tmp_path = None
+
+        try:
+            # Save temporarily
+            with tempfile.NamedTemporaryFile(
+                delete=False, suffix=f".{suffix}", dir=TEMP_DIR
+            ) as tmp:
+                tmp.write(await upload_file.read())
+                tmp_path = Path(tmp.name)
+                logger.opt(colors=True).debug(
+                    f"Saved temporary <green>{upload_file.filename}</green> at: <green>{tmp_path}</green>"
+                )
+
+            suffix_lower = suffix.lower()
+
+            match suffix_lower:
+                case "pdf":
+                    # Use the Docling PDF pipeline for PDF files
+                    return self._process_pdf(tmp_path)
+                case "txt":
+                    return self._process_txt(tmp_path)
+                case "md":
+                    return self._process_md(tmp_path)
+                case "docx":
+                    return self._process_docx(tmp_path)
+                case _:
+                    raise ValueError(
+                        f"Unsupported file type: {suffix.lower()}. Supported types: [{', '.join(self.SUPPORTED_FORMATS)}]"
+                    )
+        finally:
+            # Clean up temporary file
+            if tmp_path and tmp_path.exists():
+                tmp_path.unlink()
+                logger.opt(colors=True).debug(
+                    f"Deleted temporary file: <green>{tmp_path}</green>"
+                )
+
+    @traceable(
+        run_type="tool",
+        name="Process Batch",
+        metadata={
+            "type": "Batch",
+            "ls_provider": "DoclingProcessor",
+        },
+    )
+    async def process_batch(
+        self, upload_files: List[UploadFile]
+    ) -> List[Tuple[Optional[str], str]]:
+        tasks = [
+            self._process_with_filename(upload_file)
+            for upload_file in upload_files
+        ]
+
+        return await asyncio.gather(*tasks)
+
+    @traceable(
+        run_type="tool",
+        name="Process PDF",
+        metadata={
+            "type": "sequential",
+            "ls_provider": "DoclingProcessor",
+        },
+    )
+    def _process_pdf(self, tmp_path: Path) -> str:
+        """Convert a PDF to a DoclingDocument using configured Docling pipeline."""
+        start_time = time.time()
+
+        pipeline = PdfPipelineOptions(
+            do_ocr=True,
+            do_code_enrichment=self.code_enrichment,
+            do_formula_enrichment=self.formula_enrichment,
+            accelerator_options=AcceleratorOptions(
+                num_threads=self.num_threads,
+                device=AcceleratorDevice.CUDA,
+            ),
+            ocr_options=EasyOcrOptions(
+                lang=["en", "uk", "ru"],
+                model_storage_directory="ocr_models",  # Path to store downloaded OCR models
+                confidence_threshold=0.75,  # Lower value → detect more uncertain text
+                bitmap_area_threshold=0.1,  # Lower value → capture smaller text regions
+                download_enabled=True,  # Automatically download missing models
+                suppress_mps_warnings=True,  # Hide irrelevant MPS (Metal) warnings
+            ),
+        )
+
+        converter: DocumentConverter = DocumentConverter(
+            allowed_formats=[InputFormat.PDF],
+            format_options={
+                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline)
+            },
+        )
+
+        result: ConversionResult = converter.convert(tmp_path)
+
+        doc: DoclingDocument = result.document
+
+        text_markdown: str = doc.export_to_markdown()
+
+        logger.opt(colors=True).info(
+            f"Completed PDF processing in {time.time() - start_time:.2f} seconds for temp file: <green>{tmp_path.name}</green>"
+        )
+
+        return text_markdown
+
+    @traceable(
+        run_type="tool",
+        name="Process TXT",
+        metadata={
+            "type": "sequential",
+            "ls_provider": "DoclingProcessor",
+        },
+    )
+    def _process_txt(self, tmp_path: Path) -> str:
+        """Process plain text files and return content (prefer Docling markdown if available)."""
+        # Prefer Docling normalization but fall back to raw read if unavailable
+        try:
+            return self._process_with_docling(tmp_path, InputFormat.TXT)
+        except Exception:
+            # Minimised try/except here — if docling fails, fall back to straightforward read
+            try:
+                with open(tmp_path, "r", encoding="utf-8") as fh:
+                    return fh.read()
+            except Exception:
+                raise ValueError("Failed to process TXT: unable to read file.")
+
+    @traceable(
+        run_type="tool",
+        name="Process MD",
+        metadata={
+            "type": "sequential",
+            "ls_provider": "DoclingProcessor",
+        },
+    )
+    def _process_md(self, tmp_path: Path) -> str:
+        """Process markdown files using Docling to extract structure."""
+        try:
+            start_time = time.time()
+
+            converter = DocumentConverter()
+
+            result: ConversionResult = converter.convert(tmp_path)
+            
+            doc: DoclingDocument = result.document  
+
+            text_markdown: str = doc.export_to_markdown()
+
+            logger.opt(colors=True).info(
+                f"Completed MD processing in {time.time() - start_time:.2f} seconds for temp file: <green>{tmp_path.name}</green>"
+            )
+
+            return text_markdown
+
+        except Exception as e:
+
+            raise ValueError(f"Failed to process MD: {str(e)}")
+
+    @traceable(
+        run_type="tool",
+        name="Process DOCX",
+        metadata={
+            "type": "sequential",
+            "ls_provider": "DoclingProcessor",
+        },
+    )
+    def _process_docx(self, tmp_path: Path) -> str:
+        """Process docx files; try docling first and fallback to python-docx parsing."""
+        try:
+            return self._process_with_docling(tmp_path, InputFormat.DOCX)
+        except Exception:
+            # Single fallback try/except to python-docx parsing
+            try:
+                doc = DocxDocument(tmp_path)
+                paragraphs: List[str] = [p.text for p in doc.paragraphs if p.text.strip()]
+                return "\n\n".join(paragraphs)
+            except Exception as e:
+                raise ValueError(f"Failed to process DOCX: {str(e)}")
+
+    @traceable(
+        run_type="tool",
+        name="Process with Filename",
+        metadata={
+            "type": "sequential",
+            "ls_provider": "DoclingProcessor",
+        },
+    )
+    async def _process_with_filename(
+        self, upload_file: UploadFile
+    ) -> Tuple[Optional[str], str]:
+        """Process a file and return tuple of (text, filename)."""
+        text = await self.process(upload_file)
+        return (text, upload_file.filename)
+
+    @traceable(
+        run_type="tool",
+        name="Docling Format Converter",
+        metadata={
+            "type": "internal",
+            "ls_provider": "DoclingProcessor",
+        },
+    )
+    def _process_with_docling(
+        self, tmp_path: Path, input_format: InputFormat
+    ) -> str:
+        """Try to convert a file using Docling DocumentConverter and return markdown.
+
+        This is used to keep TXT/MD/DOCX handling consistent with PDF output,
+        returning markdown-like structured text when possible.
+        """
+        start_time = time.time()
+
+        converter: DocumentConverter = DocumentConverter(
+            allowed_formats=[input_format],
+        )
+        
+        result: ConversionResult = converter.convert(tmp_path)
+        
+        doc: DoclingDocument = result.document
+        
+        text_markdown: str = doc.export_to_markdown()
+
+        logger.opt(colors=True).info(
+            f"Completed {input_format.value} processing in {time.time() - start_time:.2f} seconds for temp file: <green>{tmp_path.name}</green>"
+        )
+
+        return text_markdown

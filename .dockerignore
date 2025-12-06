@@ -1,0 +1,18 @@
+# All cache files
+__pycache__/
+
+# VsCode settings folder
+.vscode/
+
+# OCR folder
+ocr_models/
+
+# Temp files
+temp_pdfs/
+
+# all .ipynb
+*.ipynb
+
+# Git
+.git
+.gitignore

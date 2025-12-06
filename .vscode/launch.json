@@ -1,0 +1,54 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "chatbot.main",
+      "justMyCode": true,
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env",
+      "cwd": "${workspaceFolder}",
+      "args": [],
+      "env": {
+        "POETRY_ACTIVE": "1"
+      }
+    },
+    {
+      "name": "Streamlit UI",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "streamlit",
+      "args": [
+        "run",
+        "ui/home.py",
+        "--server.port",
+        "8500",
+        "--server.address",
+        "127.0.0.1"
+      ],
+      "justMyCode": true,
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "POETRY_ACTIVE": "1"
+      }
+    },
+    {
+      "name": "Run Python File",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "test.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "POETRY_ACTIVE": "1"
+      }
+    }
+
+  ]
+}
