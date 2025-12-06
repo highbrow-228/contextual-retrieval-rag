@@ -52,8 +52,8 @@ class Processor(BaseProcessor):
         self.__init_pdf_pipeline_options()
 
     @traceable(
-        run_type="tool",
-        name="Process Upload",
+        run_type="chain",
+        name="Process Upload File",
         metadata={
             "type": "sequential",
             "ls_provider": "DoclingProcessor",
@@ -149,7 +149,7 @@ class Processor(BaseProcessor):
 
     @traceable(
         run_type="tool",
-        name="Process PDF",
+        name="Process PDF file",
         metadata={
             "type": "sequential",
             "ls_provider": "DoclingProcessor",
@@ -182,7 +182,7 @@ class Processor(BaseProcessor):
 
     @traceable(
         run_type="tool",
-        name="Process TXT",
+        name="Process TXT file",
         metadata={
             "type": "sequential",
             "ls_provider": "DoclingProcessor",
@@ -203,7 +203,7 @@ class Processor(BaseProcessor):
 
     @traceable(
         run_type="tool",
-        name="Process MD",
+        name="Process MD file",
         metadata={
             "type": "sequential",
             "ls_provider": "DoclingProcessor",
@@ -234,7 +234,7 @@ class Processor(BaseProcessor):
 
     @traceable(
         run_type="tool",
-        name="Process DOCX",
+        name="Process DOCX file",
         metadata={
             "type": "sequential",
             "ls_provider": "DoclingProcessor",

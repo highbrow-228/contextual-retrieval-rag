@@ -77,7 +77,7 @@ class OpenAIEmbedder(BaseProcessor, EmbeddingFunction):
         return [item.embedding for item in response.data]
 
     @traceable(
-        run_type="embedding",
+        run_type="chain",
         name="Create Embedding for Chunks",
         metadata={
             "ls_provider": "OpenAIEmbedder",

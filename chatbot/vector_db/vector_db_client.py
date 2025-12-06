@@ -230,19 +230,35 @@ class ChromaDBClient(BaseVectorDB):
     def _add_to_collection(
         self, collection_name: CollectionName, data: list[Chunk]
     ) -> None:
-        """Add data to a collection."""
+        """Add data to a collection with batch size limit.
+        
+        ChromaDB has a maximum batch size of 1000, so we split larger batches.
+        """
+        MAX_BATCH_SIZE = 1000
 
         collection: Collection = self._get_or_create_collection(
             collection_name
         )
 
-        prepared_data: PrepareDataSchema = self.prepare_data(data)
+        # Split data into batches of max 1000
+        total_chunks = len(data)
+        for i in range(0, total_chunks, MAX_BATCH_SIZE):
+            batch = data[i : i + MAX_BATCH_SIZE]
+            prepared_data: PrepareDataSchema = self.prepare_data(batch)
 
-        collection.add(
-            ids=prepared_data.ids,
-            documents=prepared_data.documents,
-            metadatas=prepared_data.metadatas,
-            embeddings=prepared_data.embeddings,
+            collection.add(
+                ids=prepared_data.ids,
+                documents=prepared_data.documents,
+                metadatas=prepared_data.metadatas,
+                embeddings=prepared_data.embeddings,
+            )
+
+            logger.opt(colors=True).info(
+                f"Added batch <cyan>{i // MAX_BATCH_SIZE + 1}</cyan> ({len(batch)} chunks) to collection <green>{collection_name.value}</green>"
+            )
+
+        logger.opt(colors=True).info(
+            f"Completed adding <cyan>{total_chunks}</cyan> chunks to collection <green>{collection_name.value}</green>"
         )
 
         return collection
@@ -618,13 +634,6 @@ class ChromaDBClient(BaseVectorDB):
         has_embeddings = (
             embeddings_list is not None and len(embeddings_list) > 0
         )
-
-        # Log warning if embeddings are missing
-        if not has_embeddings:
-            logger.opt(colors=True).warning(
-                f"<yellow>Embeddings not available</yellow> for {len(ids)} document(s). "
-                f"Consider including embeddings in the query."
-            )
 
         for i, doc_id in enumerate(ids):
             metadata_dict = metadatas[i] if i < len(metadatas) else {}

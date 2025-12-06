@@ -103,6 +103,14 @@ class DocumentProcessingPipeline(BaseProcessor):
             )
             raise
 
+    @traceable(
+        run_type="tool",
+        name="Process Batch Documents",
+        metadata={
+            "type": "sequential",
+            "ls_provider": "DocumentProcessingPipeline",
+        },
+    )
     async def process_batch_documents(
         self, upload_files: List[UploadFile], collection_name: CollectionName
     ) -> List[List[Chunk]]:

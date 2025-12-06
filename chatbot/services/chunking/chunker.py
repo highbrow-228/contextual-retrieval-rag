@@ -30,7 +30,7 @@ class Chunker(BaseProcessor):
         )
 
     @traceable(
-        run_type="tool",
+        run_type="chain",
         name="Forming Chunks",
         metadata={
             "ls_provider": "Chunker",
@@ -43,7 +43,7 @@ class Chunker(BaseProcessor):
             f"Starting text chunking process for file: <green>{filename}</green>"
         )
 
-        split_text: list[str] = self.splitter.split_text(text_to_split)
+        split_text: list[str] = self.__split_text_baseline(text_to_split)
 
         final_chunks: list[Chunk] = []
 
@@ -110,3 +110,23 @@ class Chunker(BaseProcessor):
             )
 
         return "\n\n".join(formatted_chunks)
+
+    @traceable(
+        run_type="tool",
+        name="Split Text",
+        metadata={
+            "ls_provider": "Chunker",
+            "type": "sequential",
+            "mode": "Baseline"
+        },
+    )
+    def __split_text_baseline(self, text: str) -> list[str]:
+        """Split text into chunks using the configured splitter.
+
+        Args:
+            text: The input text to split.
+
+        Returns:
+            A list of text chunks.
+        """
+        return self.splitter.split_text(text)
