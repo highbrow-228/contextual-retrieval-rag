@@ -4,8 +4,10 @@ from loguru import logger
 
 # Local imports
 from chatbot.config.db_config import CollectionName
+from chatbot.config.status_config import Status
 from chatbot.models.chunk import Chunk
 from chatbot.models.database import (
+    CreateCollectionSchema,
     DeleteByFilenameSchema,
     DeleteFromCollectionSchema,
 )
@@ -42,6 +44,59 @@ async def list_collections_route() -> list[str]:
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error listing collections: {e}"
+        )
+
+
+@router.post("/create_collection/", response_model=CreateCollectionSchema)
+@log_endpoint_execution
+async def create_collection_route(
+    collection_name: CollectionName = Query(
+        ..., description="Name of the collection to create"
+    )
+) -> CreateCollectionSchema:
+    """
+    Create a new collection in the vector database.
+
+    Parameters
+    ----------
+    - **collection_name** (str): Name of the collection to create.
+
+    Returns
+    -------
+    - **CreateCollectionSchema**: Status of the collection creation operation.
+
+    Raises
+    ------
+    - **HTTPException**: If collection creation fails.
+    """
+    # Local imports
+    from chatbot.api.app import pipeline
+
+    try:
+        logger.opt(colors=True).info(
+            f"Creating new collection: <green>{collection_name}</green>"
+        )
+
+        pipeline.db_handler._get_or_create_collection(collection_name)
+
+        logger.opt(colors=True).info(
+            f"Collection <green>{collection_name}</green> created successfully."
+        )
+
+        return CreateCollectionSchema(
+            collection_name=collection_name,
+            status=Status.SUCCESS,
+            message=f"Collection '{collection_name}' created successfully.",
+            error=None,
+        )
+
+    except Exception as e:
+        logger.opt(colors=True).error(
+            f"Error creating collection <green>{collection_name}</green>: {e}"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error creating collection: {str(e)}",
         )
 
 
@@ -253,7 +308,7 @@ async def delete_document_route(
         return DeleteFromCollectionSchema(
             collection_name=collection_name,
             doc_id=doc_id,
-            status="Success",
+            status=Status.SUCCESS,
             error=None,
         )
     except DocumentNotFoundError as e:
@@ -443,7 +498,7 @@ async def delete_collection_route(
                     DeleteFromCollectionSchema(
                         collection_name=collection_name,
                         doc_id=chunk.id,
-                        status="Success",
+                        status=Status.SUCCESS,
                         error=None,
                     )
                 )
@@ -455,13 +510,13 @@ async def delete_collection_route(
                     DeleteFromCollectionSchema(
                         collection_name=collection_name,
                         doc_id=chunk.id,
-                        status="Failed",
+                        status=Status.FAILED,
                         error=str(e),
                     )
                 )
 
         logger.opt(colors=True).info(
-            f"Collection clear operation completed. Total: <cyan>{len(deletion_results)}</cyan>, Successful: <cyan>{sum(1 for r in deletion_results if r.status == 'Success')}</cyan>"
+            f"Collection clear operation completed. Total: <cyan>{len(deletion_results)}</cyan>, Successful: <cyan>{sum(1 for r in deletion_results if r.status == Status.SUCCESS)}</cyan>"
         )
 
         return deletion_results

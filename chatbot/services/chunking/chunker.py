@@ -24,6 +24,9 @@ class Chunker(BaseProcessor):
         self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=self.chunk_size,
             chunk_overlap=self.chunk_overlap,
+            separators=["\n\n", "\n", ". ", " ", ""],
+            keep_separator=False,
+            strip_whitespace=True,
         )
 
     @traceable(

@@ -1,13 +1,14 @@
 """Documents page - Manage documents in the database."""
 
 # Standard library imports
+from datetime import datetime
 from typing import Any
 
 # Third-party imports
 import streamlit as st
 
 # Local imports
-from chatbot.globals import ui_settings
+from chatbot.globals import db_settings, ui_settings
 from chatbot.models.chunk import Chunk
 from ui.utils.delete_documents import (
     delete_all_documents,
@@ -125,6 +126,16 @@ else:
         # Create a table view
         doc_data: dict[str, Any] = []
         for doc in documents:
+            date_added = doc.metadata.date_added or "N/A"
+            if isinstance(date_added, str) or not isinstance(
+                date_added, datetime
+            ):
+                try:
+                    date_obj = datetime.fromisoformat(date_added)
+                    date_added = date_obj.strftime(db_settings.DATA_FORMAT)
+                except (ValueError, AttributeError):
+                    pass
+
             doc_data.append(
                 {
                     "ID": doc.id or "N/A",

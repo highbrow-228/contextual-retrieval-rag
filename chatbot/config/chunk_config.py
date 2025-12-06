@@ -15,7 +15,9 @@ load_dotenv()
 class ChunkSettings(BaseSettings):
     """Application settings loaded from environment variables"""
 
-    CHUNK_SIZE: int = Field(default=700, description="Size of each text chunk")
+    CHUNK_SIZE: int = Field(
+        default=1000, description="Size of each text chunk"
+    )
 
     CHUNK_OVERLAP: int = Field(
         default=200, description="Overlap size between text chunks"

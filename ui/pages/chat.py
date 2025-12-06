@@ -13,7 +13,7 @@ from chatbot.models.chat import Chat
 
 
 API_URL = f"http://{DEFAULT_API_HOST}:{api_settings.PORT}"
-TIMEOUT = 120
+TIMEOUT = 300
 
 
 # Configure page
@@ -32,8 +32,10 @@ def receive_answer_from_RAG(user_input: str) -> str:
     """Send message to ChatBot API and get response."""
     try:
         response = requests.get(
-            f"{API_URL}/chat/query",
-            params={"user_input": user_input},
+            f"{API_URL}/chat/query_baseline",
+            params={
+                "user_input": user_input,
+            },
             timeout=TIMEOUT,
         )
 

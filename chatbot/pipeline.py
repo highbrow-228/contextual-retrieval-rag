@@ -11,6 +11,7 @@ from loguru import logger
 # Local imports
 from chatbot.base.base_classes import BaseProcessor
 from chatbot.config.db_config import CollectionName
+from chatbot.config.pipeline_config import PipelineMode
 from chatbot.globals import (
     chunk_settings,
     db_settings,
@@ -45,51 +46,21 @@ class DocumentProcessingPipeline(BaseProcessor):
             "ls_provider": "DocumentProcessingPipeline",
         },
     )
-    def process(self, user_input: str, n_results: int = 5) -> Chat:
+    def process(
+        self, mode: PipelineMode, user_input: str, n_results: int = 5
+    ) -> Chat:
         """
         This method is required by BaseProcessor but is not used in DocumentProcessingPipeline.
         Please use `process_document` or `process_batch_documents` instead.
         Returns a message indicating that direct string processing is not supported.
         """
-        try:
-            logger.opt(colors=True).info(
-                f"Received user input for RAG processing: <yellow>{user_input}</yellow>"
-            )
-
-            rag_results: RAGQueryResult = self.db_handler.retrieve(
-                query=user_input,
-                collection_name=CollectionName.RAG_DOCUMENT,
-                n_results=n_results,
-            )
-
-            if rag_results.retrieved_chunks == []:
-                logger.opt(colors=True).warning(
-                    f"No relevant chunks found in the database for input '<yellow>{user_input[:100]}</yellow>'."
-                )
-                return Chat(
-                    llm_response=(
-                        "I'm sorry, but I couldn't find any relevant information in the documents to answer your question.\n"
-                        "No relevant chunks were found in the database."
-                    )
-                )
-
-            text_chunks: str = self.chunker.format_retrieved_chunks(
-                rag_results.retrieved_chunks
-            )
-
-            # Generate LLM response using RAG
-            llm_response: str = self.openai_handler.invoke_rag(
-                user_input=user_input,
-                text_chunks=text_chunks,
-            )
-
-            return Chat(llm_response=llm_response)
-
-        except Exception as e:
-            logger.opt(colors=True).error(
-                f"Error during RAG processing for input '<yellow>{user_input[:100]}</yellow>': <red>{str(e)}</red>"
-            )
-            raise
+        match mode:
+            case PipelineMode.BASELINE:
+                return self._process_baseline(user_input, n_results)
+            case PipelineMode.ADVANCED:
+                return self._process_advanced(user_input, n_results)
+            case _:
+                raise ValueError(f"Unsupported pipeline mode: {mode}")
 
     @traceable(
         run_type="tool",
@@ -185,6 +156,101 @@ class DocumentProcessingPipeline(BaseProcessor):
         except Exception as e:
             logger.opt(colors=True).error(
                 f"Error processing batch of <yellow>{len(upload_files)}</yellow> documents for collection '<green>{collection_name.value}</green>': <red>{str(e)}</red>"
+            )
+            raise
+
+    @traceable(
+        run_type="tool",
+        name="Process Baseline",
+    )
+    def _process_baseline(self, user_input: str, n_results: int) -> Chat:
+        """Process user input in baseline mode."""
+        collection_name: CollectionName = CollectionName.BASELINE_DOCUMENTS
+
+        try:
+            logger.opt(colors=True).info(
+                f"Received user input for RAG processing: <yellow>{user_input}</yellow>"
+            )
+
+            rag_results: RAGQueryResult = self.db_handler.retrieve(
+                query=user_input,
+                collection_name=collection_name,
+                n_results=n_results,
+            )
+
+            if rag_results.retrieved_chunks == []:
+                logger.opt(colors=True).warning(
+                    f"No relevant chunks found in the database for input '<yellow>{user_input[:100]}</yellow>'."
+                )
+                return Chat(
+                    llm_response=(
+                        "I'm sorry, but I couldn't find any relevant information in the documents to answer your question.\n"
+                        "No relevant chunks were found in the database."
+                    )
+                )
+
+            text_chunks: str = self.chunker.format_retrieved_chunks(
+                rag_results.retrieved_chunks
+            )
+
+            # Generate LLM response using RAG
+            llm_response: str = self.openai_handler.invoke_rag(
+                user_input=user_input,
+                text_chunks=text_chunks,
+            )
+
+            return Chat(llm_response=llm_response)
+
+        except Exception as e:
+            logger.opt(colors=True).error(
+                f"Error during RAG processing for input '<yellow>{user_input[:100]}</yellow>': <red>{str(e)}</red>"
+            )
+            raise
+
+    @traceable(
+        run_type="tool",
+        name="Process Advanced",
+    )
+    def _process_advanced(self, user_input: str, n_results: int) -> Chat:
+        collection_name: CollectionName = CollectionName.ADVANCED_DOCUMENTS
+        # TODO: Implement advanced processing logic
+        try:
+            logger.opt(colors=True).info(
+                f"Received user input for RAG processing: <yellow>{user_input}</yellow>"
+            )
+
+            rag_results: RAGQueryResult = self.db_handler.retrieve(
+                query=user_input,
+                collection_name=collection_name,
+                n_results=n_results,
+            )
+
+            if rag_results.retrieved_chunks == []:
+                logger.opt(colors=True).warning(
+                    f"No relevant chunks found in the database for input '<yellow>{user_input[:100]}</yellow>'."
+                )
+                return Chat(
+                    llm_response=(
+                        "I'm sorry, but I couldn't find any relevant information in the documents to answer your question.\n"
+                        "No relevant chunks were found in the database."
+                    )
+                )
+
+            text_chunks: str = self.chunker.format_retrieved_chunks(
+                rag_results.retrieved_chunks
+            )
+
+            # Generate LLM response using RAG
+            llm_response: str = self.openai_handler.invoke_rag(
+                user_input=user_input,
+                text_chunks=text_chunks,
+            )
+
+            return Chat(llm_response=llm_response)
+
+        except Exception as e:
+            logger.opt(colors=True).error(
+                f"Error during RAG processing for input '<yellow>{user_input[:100]}</yellow>': <red>{str(e)}</red>"
             )
             raise
 
