@@ -96,7 +96,10 @@ if send_button and user_input:
     )
 
     # Get bot response
-    with st.spinner("Thinking..."):
+    with st.spinner(
+        text="Thinking...",
+        show_time=True,
+    ):
         bot_response = receive_answer_from_RAG(user_input)
 
     # Add bot message

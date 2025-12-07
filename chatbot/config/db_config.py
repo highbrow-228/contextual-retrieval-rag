@@ -64,6 +64,11 @@ class DatabaseSettings(BaseSettings):
         description="Datetime format for displaying dates",
     )
 
+    CONCURENT_DB_REQUESTS_FOR_UPLOAD: int = Field(
+        default=100,
+        description="Number of concurrent database requests during document upload",
+    )
+
     @model_validator(mode="after")
     def validate_mode_settings(self):
         """Validate that required settings are present based on mode"""

@@ -3,7 +3,7 @@ import requests
 import streamlit as st
 
 # Local imports
-from chatbot.globals import DEFAULT_API_URL_FOR_UI, TIMEOUT_UPLOAD_REQUEST
+from chatbot.globals import DEFAULT_API_URL_FOR_UI
 
 
 def upload_document_to_collection(
@@ -45,7 +45,7 @@ def upload_document_to_collection(
         return None
     except requests.exceptions.Timeout:
         st.error(
-            f"Upload timeout (>{TIMEOUT_UPLOAD_REQUEST}s). File may be too large or API is slow."
+            f"Upload timeout (>{None}s). File may be too large or API is slow."
         )
         return None
     except Exception as e:
@@ -93,11 +93,13 @@ def upload_documents_batch_to_collection(
     except requests.exceptions.HTTPError as e:
         st.error(
             f"Batch upload failed: {e.response.json().get('detail', str(e))}"
+            f"Details: {e}"
         )
         return None
-    except requests.exceptions.Timeout:
+    except requests.exceptions.Timeout as e:
         st.error(
-            f"Upload timeout (>{TIMEOUT_UPLOAD_REQUEST}s). Files may be too large or API is slow."
+            f"Upload timeout (>{None}s). Files may be too large or API is slow."
+            f"Details: {e}"
         )
         return None
     except Exception as e:

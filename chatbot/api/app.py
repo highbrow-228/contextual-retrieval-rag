@@ -16,20 +16,21 @@ logger.remove()
 logger.add(sys.stdout, level="DEBUG")
 logger.add(
     "logs/app.log",
-    rotation="10 MB",          # або "1 day"
-    retention="14 days",       # скільки зберігати
-    compression="zip",         # архівація
-    level="DEBUG",
-    enqueue=True,              # thread / process safe
-    backtrace=True,            # stacktrace при exception
-    diagnose=False,            # True тільки для debug
+    rotation="10 MB",  # Rotate log file when it reaches 10 MB
+    retention="14 days",  # Keep rotated logs for 14 days
+    compression="zip",  # Compress rotated log files
+    level="INFO",  # Only log INFO level and above to file
+    enqueue=True,  # Thread-safe logging queue
+    backtrace=True,  # Include full stack trace on exceptions
+    diagnose=False,  # Disable verbose diagnostics (only enable for debugging)
     format=(
-        "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-        "<level>{level:<8}</level> | "
-        "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
+        "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+        "<level>{level}</level> | "
+        "<cyan>{name}</cyan>:<yellow>{function}</yellow>:<red>{line}</red> - "
         "<level>{message}</level>"
     ),
 )
+
 # Initialize LangSmith tracing if enabled
 if (
     langsmith_settings.LANGSMITH_TRACING.value == "true"
@@ -38,7 +39,9 @@ if (
     os.environ["LANGSMITH_API_KEY"] = langsmith_settings.LANGSMITH_API_KEY
     os.environ["LANGSMITH_PROJECT"] = langsmith_settings.LANGSMITH_PROJECT
     os.environ["LANGSMITH_ENDPOINT"] = langsmith_settings.LANGSMITH_ENDPOINT
-    os.environ["LANGSMITH_TRACING"] = langsmith_settings.LANGSMITH_TRACING.value
+    os.environ["LANGSMITH_TRACING"] = (
+        langsmith_settings.LANGSMITH_TRACING.value
+    )
 
     logger.opt(colors=True).info(
         f"<green>LangSmith tracing enabled</green> for project: <yellow>{langsmith_settings.LANGSMITH_PROJECT}</yellow>"

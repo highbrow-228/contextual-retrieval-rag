@@ -32,7 +32,7 @@ def delete_document_by_id(
 
 def delete_document_by_filename(
     selected_collection: str, selected_filename: str
-) -> dict:
+) -> dict | None:
     try:
         response = requests.delete(
             f"{DEFAULT_API_URL_FOR_UI}/database/documents/by_filename",
@@ -43,8 +43,7 @@ def delete_document_by_filename(
             timeout=TIMEOUT_PER_REQUEST,
         )
         response.raise_for_status()
-        result = response.json()
-        return result
+        return response.json()
 
     except Exception as e:
         st.error(f"Failed to delete documents: {e}")

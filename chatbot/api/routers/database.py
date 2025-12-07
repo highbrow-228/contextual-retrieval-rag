@@ -169,7 +169,7 @@ async def process_batch(
     HTTPException
         If processing fails for any reason.
     """
-    logger.opt(colors=True).debug(
+    logger.opt(colors=True).info(
         f"Received <yellow>{len(upload_files)}</yellow> files for process_batch. Filenames: <yellow>{[file.filename for file in upload_files]}</yellow>"
     )
 
@@ -452,9 +452,7 @@ async def delete_documents_by_filename(
         )
 
 
-@router.delete(
-    "/all_documents", response_model=DeleteByFilenameSchema
-)
+@router.delete("/all_documents", response_model=DeleteByFilenameSchema)
 @log_endpoint_execution
 async def delete_collection_route(
     collection_name: CollectionName,
@@ -488,9 +486,11 @@ async def delete_collection_route(
             return []
 
         # Delete each document and collect results
-        deletion_results: DeleteByFilenameSchema = pipeline.db_handler._delete_batch_from_collection(
-            collection_name=collection_name,
-            doc_ids=[chunk.id for chunk in chunks],
+        deletion_results: DeleteByFilenameSchema = (
+            pipeline.db_handler._delete_batch_from_collection(
+                collection_name=collection_name,
+                doc_ids=[chunk.id for chunk in chunks],
+            )
         )
 
         logger.opt(colors=True).info(

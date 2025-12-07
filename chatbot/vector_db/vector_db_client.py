@@ -65,9 +65,11 @@ class ChromaDBClient(BaseVectorDB):
         tenant: str,
         api_key: str,
         mode: str,
+        concurent_requests_for_upload: int,
         **kwargs,
     ) -> None:
         self.embedding_fn = embedder
+        self.batch_size_for_upload = concurent_requests_for_upload
 
         match mode:
             case DatabaseMode.CLOUD.value:
@@ -92,7 +94,12 @@ class ChromaDBClient(BaseVectorDB):
             "ls_provider": "ChromaDBClient",
         },
     )
-    def process(self, collection_name: CollectionName, data: list[Chunk]):
+    def process(
+        self,
+        collection_name: CollectionName,
+        data: list[Chunk],
+        filename: str = "",
+    ) -> Collection:
         """Process data for vector database operations."""
         if data is None:
             raise ValueError("Data must be provided to add to the collection.")
@@ -228,10 +235,13 @@ class ChromaDBClient(BaseVectorDB):
 
     # Document Operations
     def _add_to_collection(
-        self, collection_name: CollectionName, data: list[Chunk], batch_size: int = 100
+        self,
+        collection_name: CollectionName,
+        data: list[Chunk],
+        filename: str = "",
     ) -> None:
         """Add data to a collection with batch size limit.
-        
+
         ChromaDB has a maximum batch size of 100, so we split larger batches.
         """
 
@@ -241,8 +251,8 @@ class ChromaDBClient(BaseVectorDB):
 
         # Split data into batches of max 100
         total_chunks = len(data)
-        for i in range(0, total_chunks, batch_size):
-            batch = data[i : i + batch_size]
+        for i in range(0, total_chunks, self.batch_size_for_upload):
+            batch = data[i : i + self.batch_size_for_upload]
             prepared_data: PrepareDataSchema = self.prepare_data(batch)
 
             collection.add(
@@ -253,11 +263,13 @@ class ChromaDBClient(BaseVectorDB):
             )
 
             logger.opt(colors=True).info(
-                f"Added batch <cyan>{i // batch_size + 1}</cyan> ({len(batch)} chunks) to collection <green>{collection_name.value}</green>"
+                f"Added batch <cyan>{i // self.batch_size_for_upload + 1}</cyan> "
+                f"<yellow>{len(batch)} chunks</yellow> to collection "
+                f"<green>{collection_name.value}</green>"
             )
 
         logger.opt(colors=True).info(
-            f"Completed adding <cyan>{total_chunks}</cyan> chunks to collection <green>{collection_name.value}</green>"
+            f"Completed adding <cyan>{total_chunks}</cyan> chunks to collection <green>{collection_name.value}</green> filename: <yellow>{filename}</yellow>"
         )
 
         return collection
@@ -352,7 +364,9 @@ class ChromaDBClient(BaseVectorDB):
             errors = []
 
             # Split into batches of max 900
-            for batch_idx, i in enumerate(range(0, total_docs, MAX_BATCH_SIZE)):
+            for batch_idx, i in enumerate(
+                range(0, total_docs, MAX_BATCH_SIZE)
+            ):
                 batch = doc_ids[i : i + MAX_BATCH_SIZE]
 
                 try:
@@ -364,7 +378,9 @@ class ChromaDBClient(BaseVectorDB):
                     )
                 except Exception as e:
                     failed_deletes += len(batch)
-                    error_msg = f"Failed to delete batch {batch_idx + 1}: {str(e)}"
+                    error_msg = (
+                        f"Failed to delete batch {batch_idx + 1}: {str(e)}"
+                    )
                     errors.append(error_msg)
                     logger.opt(colors=True).error(
                         f"Error deleting batch <cyan>{batch_idx + 1}</cyan> from <green>{collection_name.value}</green>: <red>{str(e)}</red>"
@@ -475,7 +491,9 @@ class ChromaDBClient(BaseVectorDB):
                     )
 
             logger.opt(colors=True).info(
-                f"Deleted <cyan>{successful_deletes}</cyan> document(s) with filename <yellow>{filename}</yellow> from collection <green>{collection_name.value}</green>. "
+                f"Deleted <cyan>{successful_deletes}</cyan> document(s) "
+                f"Filename <yellow>{filename}</yellow> "
+                f"From collection <green>{collection_name.value}</green>. "
                 f"Failed: <red>{failed_deletes}</red>."
             )
 

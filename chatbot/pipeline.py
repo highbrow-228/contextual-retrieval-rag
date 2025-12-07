@@ -1,6 +1,7 @@
 """Main pipeline orchestrating the document processing workflow."""
 
 # Standard library imports
+import time
 from typing import List
 
 # Third-party imports
@@ -74,6 +75,12 @@ class DocumentProcessingPipeline(BaseProcessor):
         self, upload_file: UploadFile, collection_name: CollectionName
     ) -> List[Chunk]:
         """Process a single uploaded document and add chunks to the vector database."""
+        start_time = time.time()
+        logger.opt(colors=True).info(
+            f"Starting processing for document <green>{upload_file.filename}</green>"
+            f"into collection '<green>{collection_name.value}</green>'"
+        )
+
         try:
             # Extract text from uploaded document
             text: str = await self.document_processor.process(upload_file)
@@ -86,7 +93,7 @@ class DocumentProcessingPipeline(BaseProcessor):
                 )
             )
 
-            chunks: List[Chunk] = self.embedder.create_embedding(
+            chunks: List[Chunk] = await self.embedder.create_embedding_async(
                 chunks_without_embeddings, upload_file
             )
 
@@ -95,6 +102,11 @@ class DocumentProcessingPipeline(BaseProcessor):
                 collection_name=collection_name, data=chunks
             )
 
+            logger.opt(colors=True).info(
+                f"Document <green>{upload_file.filename}</green> processed successfully: "
+                f"<green>{len(chunks)}</green> chunks added to collection <green>{collection_name.value}</green>"
+                f" in <yellow>{time.time() - start_time}</yellow> seconds"
+            )
             return chunks
 
         except Exception as e:
@@ -122,14 +134,17 @@ class DocumentProcessingPipeline(BaseProcessor):
 
         for upload_file in upload_files:
             try:
-                chunks = await self.process_document(upload_file, collection_name)
+                chunks = await self.process_document(
+                    upload_file, collection_name
+                )
                 batch_chunks.append(chunks)
                 successful_docs += 1
             except Exception as e:
                 failed_docs += 1
                 failed_doc_errors[upload_file.filename] = str(e)
                 logger.opt(colors=True).warning(
-                    f"Document <yellow>{upload_file.filename}</yellow> failed to process: <red>{str(e)}</red>"
+                    f"Document <yellow>{upload_file.filename}</yellow> failed to process:"
+                    f"<red>{e}</red>"
                 )
 
         # Log batch processing statistics
@@ -261,6 +276,7 @@ class DocumentProcessingPipeline(BaseProcessor):
         self.embedder: OpenAIEmbedder = OpenAIEmbedder(
             api_key=openai_settings.OPENAI_API_KEY,
             embedding_model_name=openai_settings.MODEL_NAME_EMBEDDING,
+            batch_size=openai_settings.MAX_CONCURRENT_REQUESTS_EMBEDDING,
         )
 
     @log_initialization("ChromaDB client")
@@ -272,6 +288,7 @@ class DocumentProcessingPipeline(BaseProcessor):
             port=db_settings.CHROMA_PORT,
             tenant=db_settings.CHROMA_TENANT,
             api_key=db_settings.CHROMA_API_KEY,
+            concurent_requests_for_upload=db_settings.CONCURENT_DB_REQUESTS_FOR_UPLOAD,
         )
 
     @log_initialization("Document Processor")

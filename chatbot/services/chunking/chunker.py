@@ -39,7 +39,7 @@ class Chunker(BaseProcessor):
     )
     async def process(self, text_to_split: str, filename: str) -> list[Chunk]:
         """Process the input text into chunks."""
-        logger.opt(colors=True).debug(
+        logger.opt(colors=True).info(
             f"Starting text chunking process for file: <green>{filename}</green>"
         )
 
@@ -57,7 +57,7 @@ class Chunker(BaseProcessor):
                 )
             )
 
-        logger.opt(colors=True).debug(
+        logger.opt(colors=True).info(
             f"Text chunking completed: <yellow>{len(final_chunks)}</yellow> chunks created for file: <green>{filename}</green>"
         )
         return final_chunks
@@ -117,7 +117,7 @@ class Chunker(BaseProcessor):
         metadata={
             "ls_provider": "Chunker",
             "type": "sequential",
-            "mode": "Baseline"
+            "mode": "Baseline",
         },
     )
     def __split_text_baseline(self, text: str) -> list[str]:

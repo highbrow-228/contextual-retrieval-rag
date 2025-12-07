@@ -83,9 +83,7 @@ class Processor(BaseProcessor):
         suffix = Path(upload_file.filename).suffix.lower().replace(".", "")
 
         logger.opt(colors=True).info(
-            f"Processing uploaded file: <green>{upload_file.filename}</green>"
-        )
-        logger.opt(colors=True).debug(
+            f"Processing uploaded file: <green>{upload_file.filename}</green> "
             f"Detected file format: <green>{suffix}</green> for file: <green>{upload_file.filename}</green>"
         )
 
@@ -101,7 +99,7 @@ class Processor(BaseProcessor):
             ) as tmp:
                 tmp.write(await upload_file.read())
                 tmp_path = Path(tmp.name)
-                logger.opt(colors=True).debug(
+                logger.opt(colors=True).info(
                     f"Saved temporary <green>{upload_file.filename}</green> at: <green>{tmp_path}</green>"
                 )
 
@@ -125,7 +123,7 @@ class Processor(BaseProcessor):
             # Clean up temporary file
             if tmp_path and tmp_path.exists():
                 tmp_path.unlink()
-                logger.opt(colors=True).debug(
+                logger.opt(colors=True).info(
                     f"Deleted temporary file: <green>{tmp_path}</green>"
                 )
 
@@ -140,10 +138,7 @@ class Processor(BaseProcessor):
     async def process_batch(
         self, upload_files: List[UploadFile]
     ) -> List[Tuple[Optional[str], str]]:
-        tasks = [
-            self.process(upload_file)
-            for upload_file in upload_files
-        ]
+        tasks = [self.process(upload_file) for upload_file in upload_files]
 
         return await asyncio.gather(*tasks)
 
