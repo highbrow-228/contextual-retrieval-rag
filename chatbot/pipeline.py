@@ -77,7 +77,7 @@ class DocumentProcessingPipeline(BaseProcessor):
         """Process a single uploaded document and add chunks to the vector database."""
         start_time = time.time()
         logger.opt(colors=True).info(
-            f"Starting processing for document <green>{upload_file.filename}</green>"
+            f"Starting processing for document <green>{upload_file.filename}</green> "
             f"into collection '<green>{collection_name.value}</green>'"
         )
 
