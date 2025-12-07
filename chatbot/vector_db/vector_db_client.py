@@ -264,7 +264,7 @@ class ChromaDBClient(BaseVectorDB):
 
             logger.opt(colors=True).info(
                 f"Added batch <cyan>{i // self.batch_size_for_upload + 1}</cyan> "
-                f"<yellow>{len(batch)} chunks</yellow> to collection "
+                f"(<yellow>{len(batch)} chunks</yellow>) to collection "
                 f"<green>{collection_name.value}</green>"
             )
 
