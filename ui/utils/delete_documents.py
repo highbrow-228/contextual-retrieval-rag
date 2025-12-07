@@ -40,7 +40,7 @@ def delete_document_by_filename(
                 "collection_name": selected_collection,
                 "filename": selected_filename,
             },
-            timeout=TIMEOUT_PER_REQUEST,
+            timeout=None,
         )
         response.raise_for_status()
         return response.json()
@@ -54,7 +54,7 @@ def delete_all_documents(selected_collection: str) -> bool:
         response = requests.delete(
             f"{DEFAULT_API_URL_FOR_UI}/database/all_documents",
             params={"collection_name": selected_collection},
-            timeout=TIMEOUT_PER_REQUEST,
+            timeout=None,
         )
         response.raise_for_status()
         return True
