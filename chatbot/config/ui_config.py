@@ -49,6 +49,16 @@ class UIConfig(BaseSettings):
         default="📋", description="Icon for the Documents management page"
     )
 
+    # Bot avatars for different RAG modes
+    UI_BASELINE_BOT_AVATAR: str = Field(
+        default="assets/baseline_avatar.png",
+        description="Avatar for baseline RAG bot (emoji or path to image)",
+    )
+    UI_ADVANCED_BOT_AVATAR: str = Field(
+        default="assets/advanced_avatar.png",
+        description="Avatar for advanced RAG bot (emoji or path to image)",
+    )
+
 
 @lru_cache()
 def get_ui_settings() -> UIConfig:

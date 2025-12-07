@@ -32,11 +32,11 @@ class Metadata(BaseModel):
         # If value is already a string, return it as is
         if isinstance(value, str):
             return value
-        
+
         # If value is a datetime without timezone info, add UTC
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
-        
+
         return value.strftime(db_settings.DATA_FORMAT)
 
     @classmethod

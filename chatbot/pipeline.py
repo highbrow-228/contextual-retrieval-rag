@@ -192,7 +192,7 @@ class DocumentProcessingPipeline(BaseProcessor):
                         "I'm sorry, but I couldn't find any relevant information in the documents to answer your question.\n"
                         "No relevant chunks were found in the database."
                     ),
-                    rag_results=rag_results
+                    rag_results=rag_results,
                 )
 
             text_chunks: str = self.chunker.format_retrieved_chunks(
@@ -205,10 +205,7 @@ class DocumentProcessingPipeline(BaseProcessor):
                 text_chunks=text_chunks,
             )
 
-            return Chat(
-                llm_response=llm_response,
-                rag_results=rag_results
-            )
+            return Chat(llm_response=llm_response, rag_results=rag_results)
 
         except Exception as e:
             logger.opt(colors=True).error(
