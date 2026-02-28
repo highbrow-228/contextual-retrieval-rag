@@ -1,9 +1,14 @@
+# Standard library imports
+from typing import List
+
 # Third-party imports
 from fastapi import APIRouter, HTTPException, Query, UploadFile
 from loguru import logger
+from pydantic import Field
 
 # Local imports
 from chatbot.config.db_config import CollectionName
+from chatbot.config.pipeline_config import PipelineMode
 from chatbot.config.status_config import Status
 from chatbot.models.chunk import Chunk
 from chatbot.models.database import (
@@ -103,7 +108,9 @@ async def create_collection_route(
 @router.post("/process/", response_model=list[Chunk])
 @log_endpoint_execution
 async def process(
-    collection_name: CollectionName, upload_file: UploadFile
+    collection_name: CollectionName,
+    mode: PipelineMode,
+    upload_file: UploadFile,
 ) -> list[Chunk]:
     """
     Process a single uploaded document and add its chunks to the vector database.
@@ -134,7 +141,7 @@ async def process(
 
     try:
         return await pipeline.process_document(
-            upload_file, collection_name=collection_name
+            upload_file, collection_name=collection_name, mode=mode
         )
     except ValueError as e:
         # Gracefully return a bad request when the processor raises a ValueError
@@ -150,7 +157,9 @@ async def process(
 @router.post("/process_batch/", response_model=list[list[Chunk]])
 @log_endpoint_execution
 async def process_batch(
-    collection_name: CollectionName, upload_files: list[UploadFile]
+    collection_name: CollectionName,
+    mode: PipelineMode,
+    upload_files: List[UploadFile],
 ) -> list[list[Chunk]]:
     """
     Process multiple uploaded documents and add their chunks to the vector database.
@@ -178,7 +187,9 @@ async def process_batch(
 
     try:
         return await pipeline.process_batch_documents(
-            upload_files=upload_files, collection_name=collection_name
+            upload_files=upload_files,
+            collection_name=collection_name,
+            mode=mode,
         )
     except ValueError as e:
         # Bad request if conversion error occurs (e.g., missing dependency)
@@ -494,7 +505,7 @@ async def delete_collection_route(
         )
 
         logger.opt(colors=True).info(
-            f"Collection clear operation completed. Total: <cyan>{len(deletion_results)}</cyan>, Successful: <cyan>{sum(1 for r in deletion_results if r.status == Status.SUCCESS)}</cyan>"
+            f"Collection clear operation completed. Total: <cyan>{deletion_results.total}</cyan>, Successful: <cyan>{deletion_results.successful}</cyan>"
         )
 
         return deletion_results

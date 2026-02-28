@@ -68,7 +68,7 @@ def get_bot_avatar(rag_mode: PipelineMode) -> str:
     """Get avatar for the bot based on RAG mode (cached)."""
     if rag_mode in _AVATAR_CACHE:
         return _AVATAR_CACHE[rag_mode]
-    
+
     if rag_mode == PipelineMode.BASELINE:
         avatar = ui_settings.UI_BASELINE_BOT_AVATAR
     else:
@@ -98,8 +98,12 @@ def init() -> None:
     if "messages" not in st.session_state:
         st.session_state.messages = []
         st.session_state.rag_mode = PipelineMode.BASELINE
-        st.session_state.baseline_avatar = get_bot_avatar(PipelineMode.BASELINE)
-        st.session_state.advanced_avatar = get_bot_avatar(PipelineMode.ADVANCED)
+        st.session_state.baseline_avatar = get_bot_avatar(
+            PipelineMode.BASELINE
+        )
+        st.session_state.advanced_avatar = get_bot_avatar(
+            PipelineMode.ADVANCED
+        )
 
     # Title
     st.title("Find answers in your documents")

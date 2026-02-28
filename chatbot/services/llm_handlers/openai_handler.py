@@ -9,6 +9,7 @@ from __future__ import annotations
 
 # Standard library imports
 import asyncio
+import random
 import time
 from typing import Any
 
@@ -158,6 +159,133 @@ class OpenAIHandler(BaseLLMHandler):
                 ),
             },
         ]
+
+    @traceable(
+        run_type="llm",
+        name="llm",
+        metadata={
+            "type": "sequential",
+            "ls_provider": "OpenAIHandler",
+            "model": "gpt-5-nano",
+        },
+    )
+    async def generate_chunk_description(
+        self,
+        current_chunk_text: str,
+        previous_summaries: list[str],
+        filename: str,
+        max_retries: int = 3,
+        max_concurrent_requests: int = 30,
+    ) -> str:
+        if previous_summaries:
+            context_history = "\n".join([f"- {s}" for s in previous_summaries])
+        else:
+            context_history = "No previous context (Start of document)."
+
+        system_prompt = """You are an expert financial document summarizer creating headers for RAG indexing.
+
+FORMAT: [Type] Entity Period: Specific Topics
+
+RULES:
+1. Type: [Announcement], [Table], [CEO Statement], [Chart], [Footnote], [MD&A], [Risk], etc.
+
+2. Entity & Period:
+   - CRITICAL: If 'Previous summaries' exist, extract Company Name and Fiscal Period EXACTLY as they appear there. Never invent or alter them.
+   - If first chunk: extract from document text directly.
+   - Format: "Company FY2022" or "Company Q3 2023" — no brackets around entity/period.
+
+3. Specific Topics (2-4 categories):
+   - Be SPECIFIC: prefer metric names over vague terms ("Revenue & EPS" not "Financial Results").
+   - STRICT: Scan all previous headers — do NOT repeat any topic already listed. Find a new angle.
+   - For multi-year tables: append "(3-year)" or "(multi-period)".
+   - If chunk is transitional/boilerplate with no unique info, still find the most specific angle available.
+
+4. Continuity check:
+   - If current chunk continues a table or section from previous chunk, note it as a continuation: add "(cont.)" after Type.
+   - Example: [Table cont.] Ulta Beauty FY2022: Operating Expenses & D&A (3-year)
+
+5. Length: 10-12 words total maximum.
+
+GOOD EXAMPLES:
+- [Table] Ulta Beauty FY2022: Sales, Comparable Growth & Gross Margins (3-year)
+- [Table cont.] Ulta Beauty FY2022: SG&A, Operating Income & EPS (3-year)
+- [CEO Statement] Company X Q3 2023: Strategic Milestones & Market Outlook
+- [MD&A] Nike FY2023: Inventory Risk, Currency Headwinds & Segment Margins
+
+BAD EXAMPLES (avoid):
+- [Table] FY2022: Financial Data — too vague, no company name
+- [Summary] Results — no period, no specifics
+- Repeating "Revenue & Gross Margins" when already covered in previous header
+"""
+
+        user_prompt = f"""CONTEXT:
+Previous summaries (DO NOT repeat their topics):
+{context_history}
+
+CURRENT CHUNK TO SUMMARIZE:
+{current_chunk_text}
+
+Instructions:
+1. Check if this chunk continues a section from previous summaries.
+2. Identify all unique metrics/topics not yet covered.
+3. Output ONLY the header. No explanation.
+
+Generate header:
+"""
+        semaphore = asyncio.Semaphore(max_concurrent_requests)
+
+        async with semaphore:
+            for attempt in range(max_retries):
+                try:
+                    response = await self.async_client.chat.completions.create(
+                        model="gpt-5-nano",
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                    )
+                    return response.choices[0].message.content.strip()
+                except RateLimitError as e:
+                    wait = self.base_delay * (2**attempt) + random.uniform(
+                        0, 1
+                    )
+                    logger.warning(
+                        f"[429 RateLimitError] attempt {attempt + 1}/{max_retries}, "
+                        f"waiting {wait:.1f}s — {e}"
+                    )
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(wait)
+                except APIConnectionError as e:
+                    wait = self.base_delay * (2**attempt) + random.uniform(
+                        0, 1
+                    )
+                    logger.warning(
+                        f"[ConnectionError] attempt {attempt + 1}/{max_retries}, "
+                        f"waiting {wait:.1f}s — {e}"
+                    )
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(wait)
+
+                except APIError as e:
+                    # 500, 503 і подібні — теж retry
+                    wait = self.base_delay * (2**attempt) + random.uniform(
+                        0, 1
+                    )
+                    logger.warning(
+                        f"[APIError {e.status_code}] attempt {attempt + 1}/{max_retries}, "
+                        f"waiting {wait:.1f}s — {e}"
+                    )
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(wait)
+
+                except Exception as e:
+                    logger.error(f"[UnexpectedError] {e}")
+                    break  # не ретраємо невідомі помилки
+
+            logger.error(
+                f"All {max_retries} attempts failed for chunk from '{filename}'. Returning empty description."
+            )
+            return ""
 
     @traceable(
         run_type="llm",

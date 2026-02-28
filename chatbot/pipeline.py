@@ -57,9 +57,17 @@ class DocumentProcessingPipeline(BaseProcessor):
         """
         match mode:
             case PipelineMode.BASELINE:
-                return self._process_baseline(user_input, n_results)
+                return self._process_baseline(
+                    user_input=user_input,
+                    n_results=n_results,
+                    collection_name=CollectionName.BASELINE_DOCUMENTS,
+                )
             case PipelineMode.ADVANCED:
-                return self._process_advanced(user_input, n_results)
+                return self._process_advanced(
+                    user_input=user_input,
+                    n_results=n_results,
+                    collection_name=CollectionName.ADVANCED_DOCUMENTS,
+                )
             case _:
                 raise ValueError(f"Unsupported pipeline mode: {mode}")
 
@@ -72,7 +80,10 @@ class DocumentProcessingPipeline(BaseProcessor):
         },
     )
     async def process_document(
-        self, upload_file: UploadFile, collection_name: CollectionName
+        self,
+        upload_file: UploadFile,
+        collection_name: CollectionName,
+        mode: PipelineMode,
     ) -> List[Chunk]:
         """Process a single uploaded document and add chunks to the vector database."""
         start_time = time.time()
@@ -85,11 +96,11 @@ class DocumentProcessingPipeline(BaseProcessor):
             # Extract text from uploaded document
             text: str = await self.document_processor.process(upload_file)
 
-            # Chunk the extracted text
             chunks_without_embeddings: List[Chunk] = (
                 await self.chunker.process(
                     text_to_split=text,
                     filename=upload_file.filename,
+                    mode=mode,
                 )
             )
 
@@ -124,7 +135,10 @@ class DocumentProcessingPipeline(BaseProcessor):
         },
     )
     async def process_batch_documents(
-        self, upload_files: List[UploadFile], collection_name: CollectionName
+        self,
+        upload_files: List[UploadFile],
+        collection_name: CollectionName,
+        mode: PipelineMode,
     ) -> List[List[Chunk]]:
         """Process multiple uploaded documents and add chunks to the vector database."""
         batch_chunks: List[List[Chunk]] = []
@@ -135,7 +149,7 @@ class DocumentProcessingPipeline(BaseProcessor):
         for upload_file in upload_files:
             try:
                 chunks = await self.process_document(
-                    upload_file, collection_name
+                    upload_file, collection_name, mode
                 )
                 batch_chunks.append(chunks)
                 successful_docs += 1
@@ -168,16 +182,16 @@ class DocumentProcessingPipeline(BaseProcessor):
         run_type="tool",
         name="Process Baseline",
     )
-    def _process_baseline(self, user_input: str, n_results: int) -> Chat:
+    def _process_baseline(
+        self, user_input: str, n_results: int, collection_name: CollectionName
+    ) -> Chat:
         """Process user input in baseline mode."""
-        collection_name: CollectionName = CollectionName.BASELINE_DOCUMENTS
-
         try:
             logger.opt(colors=True).info(
                 f"Received user input for RAG processing: <yellow>{user_input}</yellow>"
             )
 
-            rag_results: RAGQueryResult = self.db_handler.retrieve(
+            rag_results: RAGQueryResult = self.db_handler.retrieve_baseline(
                 query=user_input,
                 collection_name=collection_name,
                 n_results=n_results,
@@ -217,15 +231,15 @@ class DocumentProcessingPipeline(BaseProcessor):
         run_type="tool",
         name="Process Advanced",
     )
-    def _process_advanced(self, user_input: str, n_results: int) -> Chat:
-        collection_name: CollectionName = CollectionName.ADVANCED_DOCUMENTS
-        # TODO: Implement advanced processing logic
+    def _process_advanced(
+        self, user_input: str, n_results: int, collection_name: CollectionName
+    ) -> Chat:
         try:
             logger.opt(colors=True).info(
                 f"Received user input for RAG processing: <yellow>{user_input}</yellow>"
             )
 
-            rag_results: RAGQueryResult = self.db_handler.retrieve(
+            rag_results: RAGQueryResult = self.db_handler.retrieve_baseline(
                 query=user_input,
                 collection_name=collection_name,
                 n_results=n_results,
@@ -239,7 +253,8 @@ class DocumentProcessingPipeline(BaseProcessor):
                     llm_response=(
                         "I'm sorry, but I couldn't find any relevant information in the documents to answer your question.\n"
                         "No relevant chunks were found in the database."
-                    )
+                    ),
+                    rag_results=rag_results,
                 )
 
             text_chunks: str = self.chunker.format_retrieved_chunks(
@@ -252,11 +267,65 @@ class DocumentProcessingPipeline(BaseProcessor):
                 text_chunks=text_chunks,
             )
 
-            return Chat(llm_response=llm_response)
+            return Chat(
+                llm_response=llm_response,
+                rag_results=rag_results,
+            )
 
         except Exception as e:
             logger.opt(colors=True).error(
                 f"Error during RAG processing for input '<yellow>{user_input[:100]}</yellow>': <red>{str(e)}</red>"
+            )
+            raise
+
+    @traceable(
+        run_type="tool",
+        name="Process Baseline",
+    )
+    async def _process_document_baseline(
+        self,
+        upload_file: UploadFile,
+        collection_name: CollectionName,
+        mode: PipelineMode,
+    ) -> List[Chunk]:
+        """Process a single uploaded document and add chunks to the vector database."""
+        start_time = time.time()
+        logger.opt(colors=True).info(
+            f"Starting processing for document <green>{upload_file.filename}</green> "
+            f"into collection '<green>{collection_name.value}</green>'"
+        )
+
+        try:
+            # Extract text from uploaded document
+            text: str = await self.document_processor.process(upload_file)
+
+            chunks_without_embeddings: List[Chunk] = (
+                await self.chunker.process(
+                    text_to_split=text,
+                    filename=upload_file.filename,
+                    mode=mode.value,
+                )
+            )
+
+            chunks: List[Chunk] = await self.embedder.create_embedding_async(
+                chunks_without_embeddings, upload_file
+            )
+
+            # Store chunks in vector database
+            self.db_handler.process(
+                collection_name=collection_name, data=chunks
+            )
+
+            logger.opt(colors=True).info(
+                f"Document <green>{upload_file.filename}</green> processed successfully: "
+                f"<green>{len(chunks)}</green> chunks added to collection <green>{collection_name.value}</green>"
+                f" in <yellow>{time.time() - start_time}</yellow> seconds"
+            )
+            return chunks
+
+        except Exception as e:
+            logger.opt(colors=True).error(
+                f"Error processing document '<green>{upload_file.filename}</green>' for collection '<green>{collection_name.value}</green>': <red>{str(e)}</red>"
             )
             raise
 
@@ -303,4 +372,5 @@ class DocumentProcessingPipeline(BaseProcessor):
         self.chunker: Chunker = Chunker(
             chunk_size=chunk_settings.CHUNK_SIZE,
             chunk_overlap=chunk_settings.CHUNK_OVERLAP,
+            llm_handler=self.openai_handler,
         )

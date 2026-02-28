@@ -131,7 +131,7 @@ class ChromaDBClient(BaseVectorDB):
             "ls_provider": "ChromaDBClient",
         },
     )
-    def retrieve(
+    def retrieve_baseline(
         self,
         query: str,
         collection_name: CollectionName,
