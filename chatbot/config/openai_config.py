@@ -23,6 +23,12 @@ class OpenAISetting(BaseSettings):
         description="Model name for embeddings",
     )
 
+    MAX_CONCURRENT_REQUESTS_EMBEDDING: int = Field(
+        default=25,
+        description="Maximum number of concurrent requests for embedding generation",
+        ge=1,
+    )
+
     MODEL_NAME_RAG: str = Field(
         default="gpt-4o",
         description="Model name for RAG tasks",

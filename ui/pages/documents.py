@@ -1,14 +1,16 @@
 """Documents page - Manage documents in the database."""
 
 # Standard library imports
+from datetime import datetime
 from typing import Any
 
 # Third-party imports
 import streamlit as st
 
 # Local imports
-from chatbot.globals import ui_settings
+from chatbot.globals import db_settings, ui_settings
 from chatbot.models.chunk import Chunk
+from chatbot.models.database import DeleteByFilenameSchema
 from ui.utils.delete_documents import (
     delete_all_documents,
     delete_document_by_filename,
@@ -82,7 +84,10 @@ else:
                     type="primary",
                     key="single_upload_btn",
                 ):
-                    with st.spinner("Processing and uploading..."):
+                    with st.spinner(
+                        text="Processing and uploading...",
+                        show_time=True,
+                    ):
                         result = upload_document_to_collection(
                             selected_collection, uploaded_file
                         )
@@ -107,7 +112,10 @@ else:
                 type="primary",
                 key="batch_upload_btn",
             ):
-                with st.spinner("Processing and uploading..."):
+                with st.spinner(
+                    text="Processing and uploading...",
+                    show_time=True,
+                ):
                     result = upload_documents_batch_to_collection(
                         selected_collection, uploaded_files
                     )
@@ -125,6 +133,16 @@ else:
         # Create a table view
         doc_data: dict[str, Any] = []
         for doc in documents:
+            date_added = doc.metadata.date_added or "N/A"
+            if isinstance(date_added, str) or not isinstance(
+                date_added, datetime
+            ):
+                try:
+                    date_obj = datetime.fromisoformat(date_added)
+                    date_added = date_obj.strftime(db_settings.DATA_FORMAT)
+                except (ValueError, AttributeError):
+                    pass
+
             doc_data.append(
                 {
                     "ID": doc.id or "N/A",
@@ -176,7 +194,9 @@ else:
                     type="secondary",
                     key="delete_single_btn",
                 ):
-                    with st.spinner("Deleting document..."):
+                    with st.spinner(
+                        text="Deleting document...", show_time=True
+                    ):
                         delete_document_by_id(
                             selected_collection, selected_doc_id
                         )
@@ -214,23 +234,46 @@ else:
                         key="delete_by_filename_btn",
                     ):
                         with st.spinner(
-                            f"Deleting documents from {selected_filename}..."
+                            text=f"Deleting documents from {selected_filename}...",
+                            show_time=True,
                         ):
-                            result = delete_document_by_filename(
-                                selected_collection, selected_filename
-                            )
-                            if result.get("successful", 0) > 0:
-                                st.success(
-                                    f"Deleted {result['successful']} document(s) from '{selected_filename}'"
+                            temp_result: dict | None = (
+                                delete_document_by_filename(
+                                    selected_collection, selected_filename
                                 )
-                                if result.get("failed", 0) > 0:
-                                    st.warning(
-                                        f"{result['failed']} document(s) failed to delete"
+                            )
+
+                            result: DeleteByFilenameSchema | None = (
+                                DeleteByFilenameSchema(**temp_result)
+                                if temp_result
+                                else None
+                            )
+
+                            if isinstance(result, DeleteByFilenameSchema):
+                                if result and result.successful > 0:
+                                    st.success(
+                                        f'Documents from "{result.filename}" deleted successfully!\n\n'
+                                        f'Collection: "{result.collection_name}"\n\n'
+                                        f"Delete Summary:\n"
+                                        f"  - Total: {result.total}\n"
+                                        f"  - Successful: {result.successful}\n"
+                                        f"  - Failed: {result.failed}"
                                     )
-                                    if result.get("errors"):
-                                        with st.expander("Error details"):
-                                            for error in result["errors"]:
-                                                st.text(error)
+                                elif result and result.successful == 0:
+                                    st.warning(
+                                        f'No documents were deleted for "{result.filename}".\n'
+                                        f"Total found: {result.total}, Failed: {result.failed}"
+                                        f'Collection: "{result.collection_name}"'
+                                    )
+                                else:
+                                    st.error(
+                                        "Failed to delete documents. Please try again."
+                                    )
+                            else:
+                                st.error(
+                                    "Failed to delete documents. Please try again."
+                                    f"Result type: {type(result)} and value: {result}"
+                                )
                             st.rerun()
 
         # Tab 3: Delete all documents
@@ -245,11 +288,20 @@ else:
                 key="delete_all_btn",
             ):
                 if st.session_state.get("confirm_delete_all"):
-                    with st.spinner("Deleting all documents..."):
-                        delete_all_documents(selected_collection)
-                        st.success(
-                            f"All documents deleted from '{selected_collection}'"
+                    with st.spinner(
+                        text="Deleting all documents...", show_time=True
+                    ):
+                        result: bool = delete_all_documents(
+                            selected_collection
                         )
+                        if result:
+                            st.success(
+                                f"Deleted {result['successful']} document(s) from '{selected_collection}'"
+                            )
+                        else:
+                            st.info(
+                                "No documents to delete or something went wrong."
+                            )
                         st.session_state.confirm_delete_all = False
                         st.rerun()
                 else:

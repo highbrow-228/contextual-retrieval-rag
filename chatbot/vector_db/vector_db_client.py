@@ -65,9 +65,11 @@ class ChromaDBClient(BaseVectorDB):
         tenant: str,
         api_key: str,
         mode: str,
+        concurent_requests_for_upload: int,
         **kwargs,
     ) -> None:
         self.embedding_fn = embedder
+        self.batch_size_for_upload = concurent_requests_for_upload
 
         match mode:
             case DatabaseMode.CLOUD.value:
@@ -92,7 +94,12 @@ class ChromaDBClient(BaseVectorDB):
             "ls_provider": "ChromaDBClient",
         },
     )
-    def process(self, collection_name: CollectionName, data: list[Chunk]):
+    def process(
+        self,
+        collection_name: CollectionName,
+        data: list[Chunk],
+        filename: str = "",
+    ) -> Collection:
         """Process data for vector database operations."""
         if data is None:
             raise ValueError("Data must be provided to add to the collection.")
@@ -124,7 +131,7 @@ class ChromaDBClient(BaseVectorDB):
             "ls_provider": "ChromaDBClient",
         },
     )
-    def retrieve(
+    def retrieve_baseline(
         self,
         query: str,
         collection_name: CollectionName,
@@ -181,12 +188,6 @@ class ChromaDBClient(BaseVectorDB):
                         order_number_of_chunk=metadatas_list[i].get(
                             "order_number_of_chunk", "Not specified"
                         ),
-                        markdown_header=metadatas_list[i].get(
-                            "markdown_header", "Not specified"
-                        ),
-                        markdown_section=metadatas_list[i].get(
-                            "markdown_section", "Not specified"
-                        ),
                         date_added=metadatas_list[i].get("date_added"),
                     ),
                 ),
@@ -234,21 +235,41 @@ class ChromaDBClient(BaseVectorDB):
 
     # Document Operations
     def _add_to_collection(
-        self, collection_name: CollectionName, data: list[Chunk]
+        self,
+        collection_name: CollectionName,
+        data: list[Chunk],
+        filename: str = "",
     ) -> None:
-        """Add data to a collection."""
+        """Add data to a collection with batch size limit.
+
+        ChromaDB has a maximum batch size of 100, so we split larger batches.
+        """
 
         collection: Collection = self._get_or_create_collection(
             collection_name
         )
 
-        prepared_data: PrepareDataSchema = self.prepare_data(data)
+        # Split data into batches of max 100
+        total_chunks = len(data)
+        for i in range(0, total_chunks, self.batch_size_for_upload):
+            batch = data[i : i + self.batch_size_for_upload]
+            prepared_data: PrepareDataSchema = self.prepare_data(batch)
 
-        collection.add(
-            ids=prepared_data.ids,
-            documents=prepared_data.documents,
-            metadatas=prepared_data.metadatas,
-            embeddings=prepared_data.embeddings,
+            collection.add(
+                ids=prepared_data.ids,
+                documents=prepared_data.documents,
+                metadatas=prepared_data.metadatas,
+                embeddings=prepared_data.embeddings,
+            )
+
+            logger.opt(colors=True).info(
+                f"Added batch <cyan>{i // self.batch_size_for_upload + 1}</cyan> "
+                f"(<yellow>{len(batch)} chunks</yellow>) to collection "
+                f"<green>{collection_name.value}</green>"
+            )
+
+        logger.opt(colors=True).info(
+            f"Completed adding <cyan>{total_chunks}</cyan> chunks to collection <green>{collection_name.value}</green> filename: <yellow>{filename}</yellow>"
         )
 
         return collection
@@ -296,6 +317,95 @@ class ChromaDBClient(BaseVectorDB):
             )
             raise DocumentDeletionError(
                 f"Failed to delete document '{doc_id}' from collection '{collection_name.value}': {str(e)}"
+            )
+
+    def _delete_batch_from_collection(
+        self, collection_name: CollectionName, doc_ids: list[str]
+    ) -> DeleteByFilenameSchema:
+        """Delete a batch of documents from the collection by their IDs.
+
+        Args:
+            collection_name: Name of the collection
+            doc_ids: List of document IDs to delete
+
+        Returns:
+            Dictionary with deletion statistics:
+            - total: Total documents to delete
+            - successful: Number of successfully deleted documents
+            - failed: Number of documents that failed to delete
+            - errors: List of errors if any occurred
+
+        Raises:
+            DocumentDeletionError: If batch deletion operation fails
+        """
+        MAX_BATCH_SIZE = 900
+
+        if not doc_ids:
+            logger.opt(colors=True).warning(
+                f"No document IDs provided for deletion from collection <green>{collection_name.value}</green>."
+            )
+            return DeleteByFilenameSchema(
+                collection_name=collection_name,
+                filename="batch_delete",
+                total=0,
+                successful=0,
+                failed=0,
+                errors=[],
+            )
+
+        try:
+            collection: Collection = self._get_or_create_collection(
+                collection_name
+            )
+
+            total_docs = len(doc_ids)
+            successful_deletes = 0
+            failed_deletes = 0
+            errors = []
+
+            # Split into batches of max 900
+            for batch_idx, i in enumerate(
+                range(0, total_docs, MAX_BATCH_SIZE)
+            ):
+                batch = doc_ids[i : i + MAX_BATCH_SIZE]
+
+                try:
+                    collection.delete(ids=batch)
+                    successful_deletes += len(batch)
+
+                    logger.opt(colors=True).info(
+                        f"Deleted batch <cyan>{batch_idx + 1}</cyan> ({len(batch)} document(s)) from collection <green>{collection_name.value}</green>"
+                    )
+                except Exception as e:
+                    failed_deletes += len(batch)
+                    error_msg = (
+                        f"Failed to delete batch {batch_idx + 1}: {str(e)}"
+                    )
+                    errors.append(error_msg)
+                    logger.opt(colors=True).error(
+                        f"Error deleting batch <cyan>{batch_idx + 1}</cyan> from <green>{collection_name.value}</green>: <red>{str(e)}</red>"
+                    )
+
+            logger.opt(colors=True).info(
+                f"Batch deletion completed from collection <green>{collection_name.value}</green>: "
+                f"<green>{successful_deletes}</green> successful, <red>{failed_deletes}</red> failed"
+            )
+
+            return DeleteByFilenameSchema(
+                collection_name=collection_name,
+                filename="batch_delete",
+                total=total_docs,
+                successful=successful_deletes,
+                failed=failed_deletes,
+                errors=errors,
+            )
+
+        except Exception as e:
+            logger.opt(colors=True).error(
+                f"Error deleting batch of documents from <green>{collection_name.value}</green>: <red>{str(e)}</red>"
+            )
+            raise DocumentDeletionError(
+                f"Failed to delete batch of documents from collection '{collection_name.value}': {str(e)}"
             )
 
     def _delete_by_filename(
@@ -381,7 +491,9 @@ class ChromaDBClient(BaseVectorDB):
                     )
 
             logger.opt(colors=True).info(
-                f"Deleted <cyan>{successful_deletes}</cyan> document(s) with filename <yellow>{filename}</yellow> from collection <green>{collection_name.value}</green>. "
+                f"Deleted <cyan>{successful_deletes}</cyan> document(s) "
+                f"Filename <yellow>{filename}</yellow> "
+                f"From collection <green>{collection_name.value}</green>. "
                 f"Failed: <red>{failed_deletes}</red>."
             )
 
@@ -624,13 +736,6 @@ class ChromaDBClient(BaseVectorDB):
         has_embeddings = (
             embeddings_list is not None and len(embeddings_list) > 0
         )
-
-        # Log warning if embeddings are missing
-        if not has_embeddings:
-            logger.opt(colors=True).warning(
-                f"<yellow>Embeddings not available</yellow> for {len(ids)} document(s). "
-                f"Consider including embeddings in the query."
-            )
 
         for i, doc_id in enumerate(ids):
             metadata_dict = metadatas[i] if i < len(metadatas) else {}

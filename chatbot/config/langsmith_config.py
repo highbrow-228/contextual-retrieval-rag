@@ -1,15 +1,21 @@
 """LangSmith configuration settings."""
 
 # Standard library imports
+from enum import Enum
 from functools import lru_cache
 
 # Third-party imports
 from dotenv import load_dotenv
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
 
 load_dotenv()
+
+
+class LANGSMITH_TRACING_VALUES(str, Enum):
+    TRUE = "true"
+    FALSE = "false"
 
 
 class LangSmithSettings(BaseSettings):
@@ -30,10 +36,20 @@ class LangSmithSettings(BaseSettings):
         description="LangSmith API endpoint",
     )
 
-    LANGSMITH_TRACING: bool = Field(
-        default=True,
+    LANGSMITH_TRACING: LANGSMITH_TRACING_VALUES = Field(
+        default=LANGSMITH_TRACING_VALUES.FALSE,
         description="Enable LangSmith tracing",
     )
+
+    @model_validator(mode="after")
+    def validate_langsmith_settings(self):
+        """Validate LangSmith settings and warn if tracing is disabled."""
+        if self.LANGSMITH_TRACING == "true" and not self.LANGSMITH_API_KEY:
+            raise ValueError(
+                "LANGSMITH_TRACING is enabled but LANGSMITH_API_KEY is not set. "
+                "Set LANGSMITH_API_KEY environment variable or disable tracing with LANGSMITH_TRACING=false"
+            )
+        return self
 
 
 @lru_cache()

@@ -1,11 +1,18 @@
+# Standard library imports
+from typing import List
+
 # Third-party imports
 from fastapi import APIRouter, HTTPException, Query, UploadFile
 from loguru import logger
+from pydantic import Field
 
 # Local imports
 from chatbot.config.db_config import CollectionName
+from chatbot.config.pipeline_config import PipelineMode
+from chatbot.config.status_config import Status
 from chatbot.models.chunk import Chunk
 from chatbot.models.database import (
+    CreateCollectionSchema,
     DeleteByFilenameSchema,
     DeleteFromCollectionSchema,
 )
@@ -45,10 +52,65 @@ async def list_collections_route() -> list[str]:
         )
 
 
+@router.post("/create_collection/", response_model=CreateCollectionSchema)
+@log_endpoint_execution
+async def create_collection_route(
+    collection_name: CollectionName = Query(
+        ..., description="Name of the collection to create"
+    )
+) -> CreateCollectionSchema:
+    """
+    Create a new collection in the vector database.
+
+    Parameters
+    ----------
+    - **collection_name** (str): Name of the collection to create.
+
+    Returns
+    -------
+    - **CreateCollectionSchema**: Status of the collection creation operation.
+
+    Raises
+    ------
+    - **HTTPException**: If collection creation fails.
+    """
+    # Local imports
+    from chatbot.api.app import pipeline
+
+    try:
+        logger.opt(colors=True).info(
+            f"Creating new collection: <green>{collection_name}</green>"
+        )
+
+        pipeline.db_handler._get_or_create_collection(collection_name)
+
+        logger.opt(colors=True).info(
+            f"Collection <green>{collection_name}</green> created successfully."
+        )
+
+        return CreateCollectionSchema(
+            collection_name=collection_name,
+            status=Status.SUCCESS,
+            message=f"Collection '{collection_name}' created successfully.",
+            error=None,
+        )
+
+    except Exception as e:
+        logger.opt(colors=True).error(
+            f"Error creating collection <green>{collection_name}</green>: {e}"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error creating collection: {str(e)}",
+        )
+
+
 @router.post("/process/", response_model=list[Chunk])
 @log_endpoint_execution
 async def process(
-    collection_name: CollectionName, upload_file: UploadFile
+    collection_name: CollectionName,
+    mode: PipelineMode,
+    upload_file: UploadFile,
 ) -> list[Chunk]:
     """
     Process a single uploaded document and add its chunks to the vector database.
@@ -79,7 +141,7 @@ async def process(
 
     try:
         return await pipeline.process_document(
-            upload_file, collection_name=collection_name
+            upload_file, collection_name=collection_name, mode=mode
         )
     except ValueError as e:
         # Gracefully return a bad request when the processor raises a ValueError
@@ -95,7 +157,9 @@ async def process(
 @router.post("/process_batch/", response_model=list[list[Chunk]])
 @log_endpoint_execution
 async def process_batch(
-    collection_name: CollectionName, upload_files: list[UploadFile]
+    collection_name: CollectionName,
+    mode: PipelineMode,
+    upload_files: List[UploadFile],
 ) -> list[list[Chunk]]:
     """
     Process multiple uploaded documents and add their chunks to the vector database.
@@ -114,7 +178,7 @@ async def process_batch(
     HTTPException
         If processing fails for any reason.
     """
-    logger.opt(colors=True).debug(
+    logger.opt(colors=True).info(
         f"Received <yellow>{len(upload_files)}</yellow> files for process_batch. Filenames: <yellow>{[file.filename for file in upload_files]}</yellow>"
     )
 
@@ -123,7 +187,9 @@ async def process_batch(
 
     try:
         return await pipeline.process_batch_documents(
-            upload_files=upload_files, collection_name=collection_name
+            upload_files=upload_files,
+            collection_name=collection_name,
+            mode=mode,
         )
     except ValueError as e:
         # Bad request if conversion error occurs (e.g., missing dependency)
@@ -253,7 +319,7 @@ async def delete_document_route(
         return DeleteFromCollectionSchema(
             collection_name=collection_name,
             doc_id=doc_id,
-            status="Success",
+            status=Status.SUCCESS,
             error=None,
         )
     except DocumentNotFoundError as e:
@@ -397,13 +463,11 @@ async def delete_documents_by_filename(
         )
 
 
-@router.delete(
-    "/all_documents", response_model=list[DeleteFromCollectionSchema]
-)
+@router.delete("/all_documents", response_model=DeleteByFilenameSchema)
 @log_endpoint_execution
 async def delete_collection_route(
     collection_name: CollectionName,
-) -> list[DeleteFromCollectionSchema]:
+) -> DeleteByFilenameSchema:
     """
     Delete all documents from a collection.
 
@@ -413,7 +477,7 @@ async def delete_collection_route(
 
     Returns
     -------
-    - **list[DeleteFromCollectionSchema]**: List where each item represents deletion status per document.
+    - **DeleteByFilenameSchema**: List where each item represents deletion status per document.
 
     Raises
     ------
@@ -433,35 +497,15 @@ async def delete_collection_route(
             return []
 
         # Delete each document and collect results
-        deletion_results: list[DeleteFromCollectionSchema] = []
-        for chunk in chunks:
-            try:
-                pipeline.db_handler._delete_from_collection(
-                    collection_name=collection_name, doc_id=chunk.id
-                )
-                deletion_results.append(
-                    DeleteFromCollectionSchema(
-                        collection_name=collection_name,
-                        doc_id=chunk.id,
-                        status="Success",
-                        error=None,
-                    )
-                )
-            except Exception as e:
-                logger.opt(colors=True).error(
-                    f"Error deleting document <yellow>{chunk.id}</yellow>: {e}"
-                )
-                deletion_results.append(
-                    DeleteFromCollectionSchema(
-                        collection_name=collection_name,
-                        doc_id=chunk.id,
-                        status="Failed",
-                        error=str(e),
-                    )
-                )
+        deletion_results: DeleteByFilenameSchema = (
+            pipeline.db_handler._delete_batch_from_collection(
+                collection_name=collection_name,
+                doc_ids=[chunk.id for chunk in chunks],
+            )
+        )
 
         logger.opt(colors=True).info(
-            f"Collection clear operation completed. Total: <cyan>{len(deletion_results)}</cyan>, Successful: <cyan>{sum(1 for r in deletion_results if r.status == 'Success')}</cyan>"
+            f"Collection clear operation completed. Total: <cyan>{deletion_results.total}</cyan>, Successful: <cyan>{deletion_results.successful}</cyan>"
         )
 
         return deletion_results

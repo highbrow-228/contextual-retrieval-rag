@@ -18,7 +18,7 @@ A Retrieval-Augmented Generation (RAG) chatbot system that processes documents a
     - Clone the repository and navigate to the project:
 
         ```bash
-        cd ChatBot
+        cd thesis
         ```
 
     - Create `.env` file with your configuration 
@@ -29,6 +29,10 @@ A Retrieval-Augmented Generation (RAG) chatbot system that processes documents a
 
     ```bash
     poetry install
+    ```
+    
+    ```bash
+    poetry shell
     ```
 
 3. Run the Application

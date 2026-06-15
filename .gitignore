@@ -229,3 +229,6 @@ temp_pdfs
 
 # Data
 dataset/
+
+# Logs
+logs/

@@ -1,10 +1,13 @@
 # Standard library imports
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 from uuid import uuid4
 
 # Third-party imports
 from pydantic import BaseModel, Field, field_serializer
+
+# Local imports
+from chatbot.globals import db_settings
 
 
 class Metadata(BaseModel):
@@ -18,31 +21,33 @@ class Metadata(BaseModel):
         description="Order number of the chunk in the original document",
     )
 
-    markdown_header: Optional[str] = Field(
-        default="",
-        description="Metadata extracted from markdown headers",
-    )
-
-    markdown_section: Optional[str] = Field(
-        default="",
-        description="Metadata extracted from markdown sections",
-    )
-
-    date_added: datetime = Field(
-        default_factory=datetime.now,
+    date_added: datetime | str = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
         description="Date when the chunk was added",
     )
 
     @field_serializer("date_added")
-    def serialize_date_added(self, value: datetime) -> str:
-        """Serialize datetime to ISO format string."""
-        return value.isoformat()
+    def serialize_date_added(self, value: datetime | str) -> str:
+        """Serialize datetime to ISO format string (UTC)."""
+        # If value is already a string, return it as is
+        if isinstance(value, str):
+            return value
+
+        # If value is a datetime without timezone info, add UTC
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+
+        return value.strftime(db_settings.DATA_FORMAT)
 
     @classmethod
     def from_dict(cls, data: Dict) -> "Metadata":
         """Create Metadata instance from dictionary (e.g., from database)."""
         if isinstance(data.get("date_added"), str):
-            data["date_added"] = datetime.fromisoformat(data["date_added"])
+            try:
+                data["date_added"] = datetime.fromisoformat(data["date_added"])
+            except (ValueError, TypeError):
+                # If parsing fails, use current time
+                data["date_added"] = datetime.now(timezone.utc)
         return cls(**data)
 
 

@@ -39,4 +39,7 @@ langsmith_settings: LangSmithSettings = get_langsmith_settings()
 
 # Global default API URL
 DEFAULT_API_URL_FOR_UI = f"http://{DEFAULT_API_HOST}:{api_settings.PORT}"
-TIMEOUT_PER_REQUEST = 30  # seconds
+
+# Request timeouts
+TIMEOUT_PER_REQUEST = 120  # seconds for regular requests
+TIMEOUT_UPLOAD_REQUEST = 300000  # seconds for upload requests

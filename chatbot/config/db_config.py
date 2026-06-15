@@ -25,6 +25,8 @@ class DatabaseMode(str, Enum):
 class CollectionName(str, Enum):
     """Enum for collection names in the vector database."""
 
+    BASELINE_DOCUMENTS = "baseline_documents"
+    ADVANCED_DOCUMENTS = "advanced_documents"
     RAG_DOCUMENT = "rag_document"
     ADDITIONAL_DOCS = "additional_docs"
 
@@ -55,6 +57,16 @@ class DatabaseSettings(BaseSettings):
 
     CHROMA_API_KEY: str = Field(
         default="", description="ChromaDB API key for authentication"
+    )
+
+    DATA_FORMAT: str = Field(
+        default="%Y-%m-%d %H:%M:%S UTC",
+        description="Datetime format for displaying dates",
+    )
+
+    CONCURENT_DB_REQUESTS_FOR_UPLOAD: int = Field(
+        default=100,
+        description="Number of concurrent database requests during document upload",
     )
 
     @model_validator(mode="after")

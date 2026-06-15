@@ -17,20 +17,8 @@ class OCRConfig(BaseSettings):
 
     ENGINE: str = Field(default="easyocr", description="OCR engine to use")
 
-    CODE_ENRICHMENT: bool = Field(
-        default=False, description="Enable code enrichment during OCR"
-    )
-
-    FORMULA_ENRICHMENT: bool = Field(
-        default=False, description="Enable formula enrichment during OCR"
-    )
-
     CUDA_VISIBLE_DEVICES: int = Field(
         default=0, description="CUDA device index to use"
-    )
-
-    OMP_NUM_THREADS: int = Field(
-        default=8, description="Number of threads for parallel processing"
     )
 
 

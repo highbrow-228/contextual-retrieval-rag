@@ -1,23 +1,19 @@
-# Standard library imports
-from typing import Literal
-
 # Third-party imports
 from pydantic import BaseModel, Field
 
 # Local imports
 from chatbot.config.db_config import CollectionName
+from chatbot.config.status_config import Status
 
 
 class CollectionNameBase(BaseModel):
     collection_name: CollectionName = Field(
-        CollectionName.RAG_DOCUMENT, description="Name of the collection"
+        CollectionName.BASELINE_DOCUMENTS, description="Name of the collection"
     )
 
 
 class StatusBase(BaseModel):
-    status: Literal["Success", "Failed"] = Field(
-        ..., description="Status of the operation"
-    )
+    status: Status = Field(..., description="Status of the operation")
     error: str | None = Field(
         None, description="Error message if the operation failed"
     )
@@ -53,3 +49,9 @@ class DeleteByFilenameSchema(CollectionNameBase):
         ..., description="Number of documents that failed to delete"
     )
     errors: list[str] = Field(..., description="List of error messages if any")
+
+
+class CreateCollectionSchema(CollectionNameBase, StatusBase):
+    message: str = Field(
+        ..., description="Detailed message about the operation"
+    )
