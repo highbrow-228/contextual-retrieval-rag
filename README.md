@@ -1,6 +1,6 @@
 # Contextual Retrieval for RAG
 
-Code for the paper **"An Approach to Building RAG Systems Based on the Enhanced Contextual Retrieval Method"** (V. Koval, S. Krushelnytskyi), *Science and Technology Today*, No. 4(58), 2026.
+Code for the paper **"An Approach to Building RAG Systems Based on the Enhanced Contextual Retrieval Method"** ([V. Koval](https://www.linkedin.com/in/vasyl-koval-a27a74104/), S. Krushelnytskyi), *Science and Technology Today*, No. 4(58), 2026.
 DOI: [10.52058/2786-6025-2026-4(58)-3470-3481](https://doi.org/10.52058/2786-6025-2026-4(58)-3470-3481)
 
 Standard RAG splits documents into chunks that lose their surrounding context ("semantic amnesia"): a chunk that says "revenue grew 3%" no longer says which company or which year. This project compares a **baseline RAG** with an **enhanced contextual retrieval** pipeline, where an LLM writes a short context description for every chunk before it is embedded.
